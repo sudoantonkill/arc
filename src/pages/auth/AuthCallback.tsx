@@ -30,63 +30,79 @@ export default function AuthCallback() {
       return;
     }
 
-    // Once we have a session, continue into role setup.
     if (session && supabase) {
       void (async () => {
-        // 1) If this email is allowlisted and no admin exists yet, grant admin (server-side check).
-        // Safe no-op if RPC doesn't exist yet or user isn't allowlisted.
+        // 1) Bootstrap admin if allowlisted
         try {
           await supabase.rpc("bootstrap_admin");
         } catch {
           // ignore
         }
 
-        // 2) Check if user already has a role - if so, skip role assignment
+        // 2) Check if user already has a role
         const { data: existingRoles } = await supabase
           .from("user_roles")
           .select("role")
           .limit(1);
 
         const hasExistingRole = existingRoles && existingRoles.length > 0;
-        console.log("[AuthCallback] Existing roles:", existingRoles, "hasExistingRole:", hasExistingRole);
+        let finalRole: string | null = hasExistingRole ? existingRoles[0].role : null;
 
-        // 3) If a role was chosen before Google OAuth AND user doesn't have a role yet, apply it now.
+        console.log("[AuthCallback] Existing role:", finalRole);
+
+        // 3) Get pending role from localStorage (set during sign-up)
         let pendingRole: string | null = null;
         try {
           pendingRole = window.localStorage.getItem("pending_role");
-          console.log("[AuthCallback] Retrieved pending_role from localStorage:", pendingRole);
-        } catch (e) {
-          console.error("[AuthCallback] Failed to read pending_role:", e);
+          console.log("[AuthCallback] Pending role from localStorage:", pendingRole);
+        } catch {
           pendingRole = null;
         }
 
-        // Only set the role if the user doesn't already have one
+        // 4) If no existing role and we have a pending role, set it now
         if (!hasExistingRole && (pendingRole === "student" || pendingRole === "interviewer")) {
-          console.log("[AuthCallback] Attempting to set role:", pendingRole);
-          try {
-            const { error: roleError } = await supabase.rpc("set_my_role", { _role: pendingRole });
-            if (roleError) {
-              console.error("[AuthCallback] Failed to set role:", roleError);
-            } else {
-              console.log("[AuthCallback] Successfully set role:", pendingRole);
+          console.log("[AuthCallback] Setting role:", pendingRole);
+
+          const { error: roleError } = await supabase.rpc("set_my_role", { _role: pendingRole });
+
+          if (roleError) {
+            console.error("[AuthCallback] Failed to set role:", roleError);
+          } else {
+            console.log("[AuthCallback] Role set successfully:", pendingRole);
+            finalRole = pendingRole;
+
+            // Also create the profile for the user
+            const userId = session.user.id;
+            if (pendingRole === "student") {
+              await supabase
+                .from("student_profiles")
+                .upsert({ user_id: userId }, { onConflict: "user_id" });
+            } else if (pendingRole === "interviewer") {
+              await supabase
+                .from("interviewer_profiles")
+                .upsert({ user_id: userId, verification_status: "approved" }, { onConflict: "user_id" });
             }
-          } catch (e) {
-            console.error("[AuthCallback] Exception setting role:", e);
           }
-        } else if (hasExistingRole) {
-          console.log("[AuthCallback] User already has role, skipping role assignment");
-        } else {
-          console.log("[AuthCallback] No valid pending_role found, user will go to role-setup");
         }
 
-        // Always clean up pending_role from localStorage
+        // 5) Always clean up pending_role
         try {
           window.localStorage.removeItem("pending_role");
         } catch {
           // ignore
         }
 
-        navigate("/role-setup", { replace: true });
+        // 6) Navigate directly to the appropriate dashboard
+        if (finalRole === "admin") {
+          navigate("/app/admin", { replace: true });
+        } else if (finalRole === "interviewer") {
+          navigate("/app/interviewer", { replace: true });
+        } else if (finalRole === "student") {
+          navigate("/app/student", { replace: true });
+        } else {
+          // No role set - go to role-setup as fallback
+          navigate("/role-setup", { replace: true });
+        }
       })();
     } else {
       navigate("/sign-in", { replace: true });
