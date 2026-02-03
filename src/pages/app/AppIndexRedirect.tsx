@@ -12,17 +12,14 @@ export default function AppIndexRedirect() {
     );
   }
 
-  // Debug: log roles to console
   console.log("[AppIndexRedirect] User roles:", roles);
 
-  // If user has no role, redirect to role-setup
+  // If user has no role, redirect to sign-up
   if (roles.length === 0) {
-    console.log("[AppIndexRedirect] No roles, redirecting to role-setup");
-    return <Navigate to="/role-setup" replace />;
+    console.log("[AppIndexRedirect] No roles, redirecting to sign-up");
+    return <Navigate to="/sign-up" replace />;
   }
 
-  // Get the user's role (should be exactly one for non-admins)
-  // Roles are ordered by created_at ascending, so first role is the primary one
   const primaryRole = roles[0];
   console.log("[AppIndexRedirect] Primary role:", primaryRole);
 
@@ -39,9 +36,7 @@ export default function AppIndexRedirect() {
     return <Navigate to="/app/student" replace />;
   }
 
-  // Fallback to role-setup if somehow no valid role
-  console.log("[AppIndexRedirect] Unknown role, redirecting to role-setup");
-  return <Navigate to="/role-setup" replace />;
+  // Fallback to sign-up if somehow no valid role
+  console.log("[AppIndexRedirect] Unknown role, redirecting to sign-up");
+  return <Navigate to="/sign-up" replace />;
 }
-
-

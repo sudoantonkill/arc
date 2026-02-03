@@ -118,9 +118,9 @@ export default function AuthCallback() {
         } else if (finalRole === "student") {
           navigate("/app/student", { replace: true });
         } else {
-          // No role set - go to role-setup as fallback
-          console.log("[AuthCallback] No role found, going to role-setup");
-          navigate("/role-setup", { replace: true });
+          // No role set - go to sign-up as fallback
+          console.log("[AuthCallback] No role found, going to sign-up");
+          navigate("/sign-up", { replace: true });
         }
       })();
     } else {

@@ -7,13 +7,11 @@ import BackendNotConfigured from "@/components/backend/BackendNotConfigured";
 
 interface RequireAuthProps {
   children: React.ReactNode;
-  enforceRole?: boolean;
   allowedRoles?: AppRole[];
 }
 
 export default function RequireAuth({
   children,
-  enforceRole = true,
   allowedRoles,
 }: RequireAuthProps) {
   const { session, isLoading } = useSession();
@@ -47,39 +45,31 @@ export default function RequireAuth({
     return <Navigate to="/sign-in" replace state={{ from: location.pathname }} />;
   }
 
-  if (enforceRole) {
-    if (isRolesLoading) {
-      return (
-        <div className="min-h-screen bg-background flex items-center justify-center">
-          <p className="text-muted-foreground">Loading…</p>
-        </div>
-      );
-    }
+  if (isRolesLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
 
-    const hasAnyRole = roles.includes("admin") || roles.includes("student") || roles.includes("interviewer");
-    if (!hasAnyRole) {
-      return <Navigate to="/role-setup" replace />;
-    }
+  // Check if user has one of the allowed roles
+  if (allowedRoles && allowedRoles.length > 0) {
+    const hasAllowedRole = allowedRoles.some(role => roles.includes(role));
 
-    // Check if user has one of the allowed roles
-    if (allowedRoles && allowedRoles.length > 0) {
-      const hasAllowedRole = allowedRoles.some(role => roles.includes(role));
-
-      if (!hasAllowedRole) {
-        // Redirect to the user's appropriate dashboard based on their actual role
-        if (roles.includes("admin")) {
-          return <Navigate to="/app/admin" replace />;
-        } else if (roles.includes("interviewer")) {
-          return <Navigate to="/app/interviewer" replace />;
-        } else if (roles.includes("student")) {
-          return <Navigate to="/app/student" replace />;
-        }
-        // Fallback
-        return <Navigate to="/app" replace />;
+    if (!hasAllowedRole) {
+      // Redirect to the user's appropriate dashboard based on their actual role
+      if (roles.includes("admin")) {
+        return <Navigate to="/app/admin" replace />;
+      } else if (roles.includes("interviewer")) {
+        return <Navigate to="/app/interviewer" replace />;
+      } else if (roles.includes("student")) {
+        return <Navigate to="/app/student" replace />;
       }
+      // If no role, redirect to sign-up to get a role
+      return <Navigate to="/sign-up" replace />;
     }
   }
 
   return <>{children}</>;
 }
-

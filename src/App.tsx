@@ -8,7 +8,6 @@ import SignIn from "./pages/auth/SignIn";
 import SignUp from "./pages/auth/SignUp";
 import AdminLogin from "./pages/auth/AdminLogin";
 import ResetPassword from "./pages/auth/ResetPassword";
-import RoleSetup from "./pages/auth/RoleSetup";
 import AuthCallback from "./pages/auth/AuthCallback";
 import UpdatePassword from "./pages/auth/UpdatePassword";
 import Setup from "./pages/Setup";
@@ -41,14 +40,6 @@ const App = () => (
           <Route path="/update-password" element={<UpdatePassword />} />
           <Route path="/setup" element={<Setup />} />
           <Route path="/backend-status" element={<BackendStatus />} />
-          <Route
-            path="/role-setup"
-            element={
-              <RequireAuth enforceRole={false}>
-                <RoleSetup />
-              </RequireAuth>
-            }
-          />
           <Route
             path="/app"
             element={
@@ -108,4 +99,3 @@ const App = () => (
 );
 
 export default App;
-
