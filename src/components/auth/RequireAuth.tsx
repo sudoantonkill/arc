@@ -21,7 +21,7 @@ export default function RequireAuth({
 
   if (!configured) return <BackendNotConfigured title="Backend not configured" />;
 
-  if (isLoading) {
+  if (isLoading || isRolesLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <p className="text-muted-foreground">Loading…</p>
@@ -30,7 +30,6 @@ export default function RequireAuth({
   }
 
   if (!session) {
-    // Check for master admin bypass
     const masterSession = localStorage.getItem("master_admin_session");
     if (masterSession) {
       try {
@@ -45,20 +44,12 @@ export default function RequireAuth({
     return <Navigate to="/sign-in" replace state={{ from: location.pathname }} />;
   }
 
-  if (isRolesLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading…</p>
-      </div>
-    );
-  }
-
-  // Check if user has one of the allowed roles
+  // If specific roles are required, check them
   if (allowedRoles && allowedRoles.length > 0) {
     const hasAllowedRole = allowedRoles.some(role => roles.includes(role));
 
-    if (!hasAllowedRole) {
-      // Redirect to the user's appropriate dashboard based on their actual role
+    if (!hasAllowedRole && roles.length > 0) {
+      // User has a role but not the allowed one - redirect to their dashboard
       if (roles.includes("admin")) {
         return <Navigate to="/app/admin" replace />;
       } else if (roles.includes("interviewer")) {
@@ -66,8 +57,6 @@ export default function RequireAuth({
       } else if (roles.includes("student")) {
         return <Navigate to="/app/student" replace />;
       }
-      // If no role, redirect to sign-up to get a role
-      return <Navigate to="/sign-up" replace />;
     }
   }
 
