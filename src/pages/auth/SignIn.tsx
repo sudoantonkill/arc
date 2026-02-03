@@ -62,6 +62,13 @@ export default function SignIn() {
   };
 
   const signInWithGoogle = async () => {
+    // Clear pending_role since this is sign-in (existing users already have roles)
+    try {
+      window.localStorage.removeItem("pending_role");
+    } catch {
+      // ignore
+    }
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {

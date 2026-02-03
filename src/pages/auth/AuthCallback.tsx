@@ -41,7 +41,16 @@ export default function AuthCallback() {
           // ignore
         }
 
-        // 2) If a role was chosen before Google OAuth, apply it now.
+        // 2) Check if user already has a role - if so, skip role assignment
+        const { data: existingRoles } = await supabase
+          .from("user_roles")
+          .select("role")
+          .limit(1);
+
+        const hasExistingRole = existingRoles && existingRoles.length > 0;
+        console.log("[AuthCallback] Existing roles:", existingRoles, "hasExistingRole:", hasExistingRole);
+
+        // 3) If a role was chosen before Google OAuth AND user doesn't have a role yet, apply it now.
         let pendingRole: string | null = null;
         try {
           pendingRole = window.localStorage.getItem("pending_role");
@@ -51,7 +60,8 @@ export default function AuthCallback() {
           pendingRole = null;
         }
 
-        if (pendingRole === "student" || pendingRole === "interviewer") {
+        // Only set the role if the user doesn't already have one
+        if (!hasExistingRole && (pendingRole === "student" || pendingRole === "interviewer")) {
           console.log("[AuthCallback] Attempting to set role:", pendingRole);
           try {
             const { error: roleError } = await supabase.rpc("set_my_role", { _role: pendingRole });
@@ -63,13 +73,17 @@ export default function AuthCallback() {
           } catch (e) {
             console.error("[AuthCallback] Exception setting role:", e);
           }
-          try {
-            window.localStorage.removeItem("pending_role");
-          } catch {
-            // ignore
-          }
+        } else if (hasExistingRole) {
+          console.log("[AuthCallback] User already has role, skipping role assignment");
         } else {
           console.log("[AuthCallback] No valid pending_role found, user will go to role-setup");
+        }
+
+        // Always clean up pending_role from localStorage
+        try {
+          window.localStorage.removeItem("pending_role");
+        } catch {
+          // ignore
         }
 
         navigate("/role-setup", { replace: true });
