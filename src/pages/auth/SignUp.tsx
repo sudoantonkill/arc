@@ -61,10 +61,12 @@ export default function SignUp() {
 
   const signUpWithGoogle = async () => {
     const role = form.getValues("role");
+    console.log("[SignUp] Selected role:", role);
     try {
       window.localStorage.setItem("pending_role", role);
-    } catch {
-      // ignore
+      console.log("[SignUp] Saved pending_role to localStorage:", role);
+    } catch (e) {
+      console.error("[SignUp] Failed to save pending_role:", e);
     }
 
     const { error } = await supabase.auth.signInWithOAuth({
