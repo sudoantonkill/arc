@@ -1,0 +1,28 @@
+{
+    "rewrites": [
+        {
+            "source": "/auth/callback",
+            "destination": "/index.html"
+        },
+        {
+            "source": "/sign-in",
+            "destination": "/index.html"
+        },
+        {
+            "source": "/sign-up",
+            "destination": "/index.html"
+        },
+        {
+            "source": "/role-setup",
+            "destination": "/index.html"
+        },
+        {
+            "source": "/app/:path*",
+            "destination": "/index.html"
+        },
+        {
+            "source": "/:path*",
+            "destination": "/index.html"
+        }
+    ]
+}
