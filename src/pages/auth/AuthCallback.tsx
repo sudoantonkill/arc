@@ -45,21 +45,31 @@ export default function AuthCallback() {
         let pendingRole: string | null = null;
         try {
           pendingRole = window.localStorage.getItem("pending_role");
-        } catch {
+          console.log("[AuthCallback] Retrieved pending_role from localStorage:", pendingRole);
+        } catch (e) {
+          console.error("[AuthCallback] Failed to read pending_role:", e);
           pendingRole = null;
         }
 
         if (pendingRole === "student" || pendingRole === "interviewer") {
+          console.log("[AuthCallback] Attempting to set role:", pendingRole);
           try {
-            await supabase.rpc("set_my_role", { _role: pendingRole });
-          } catch {
-            // ignore; role setup will still handle missing roles
+            const { error: roleError } = await supabase.rpc("set_my_role", { _role: pendingRole });
+            if (roleError) {
+              console.error("[AuthCallback] Failed to set role:", roleError);
+            } else {
+              console.log("[AuthCallback] Successfully set role:", pendingRole);
+            }
+          } catch (e) {
+            console.error("[AuthCallback] Exception setting role:", e);
           }
           try {
             window.localStorage.removeItem("pending_role");
           } catch {
             // ignore
           }
+        } else {
+          console.log("[AuthCallback] No valid pending_role found, user will go to role-setup");
         }
 
         navigate("/role-setup", { replace: true });
