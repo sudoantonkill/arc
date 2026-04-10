@@ -5,77 +5,162 @@ import type { Booking } from '@/types/database';
 
 const PAYMENTS_KEY = 'payments';
 
-// Payment intent creation for Stripe
-export interface CreatePaymentIntentInput {
+// Razorpay Order Response
+export interface RazorpayOrderResponse {
+    orderId: string;
+    amount: number;
+    currency: string;
+    keyId: string;
+    prefill: {
+        name: string;
+        email: string;
+        contact: string;
+    };
+    notes: Record<string, string>;
+    theme: {
+        color: string;
+    };
+    callbackUrl: string;
+}
+
+// Create Razorpay Order input
+export interface CreateOrderInput {
     bookingId: string;
-    amountCents: number;
+    interviewerId: string;
+    amountPaise: number;
+    interviewType: string;
+    scheduledAt: string;
+    studentName: string;
+    studentEmail: string;
+    studentPhone?: string;
 }
 
-export interface PaymentIntent {
-    clientSecret: string;
-    paymentIntentId: string;
-}
-
-// Simulate payment intent creation (in production, this would call a Supabase Edge Function)
-export function useCreatePaymentIntent() {
+// Create Razorpay order via Edge Function
+export function useCreateRazorpayOrder() {
     const { session } = useSession();
+    const supabase = getSupabaseClient();
 
     return useMutation({
-        mutationFn: async (input: CreatePaymentIntentInput): Promise<PaymentIntent> => {
+        mutationFn: async (input: CreateOrderInput): Promise<RazorpayOrderResponse> => {
             if (!session) throw new Error('Not authenticated');
+            if (!supabase) throw new Error('Supabase not configured');
 
-            // In production, this would call:
-            // const response = await fetch('/api/create-payment-intent', {
-            //   method: 'POST',
-            //   headers: { 'Content-Type': 'application/json' },
-            //   body: JSON.stringify(input),
-            // });
+            const { data, error } = await supabase.functions.invoke('create-razorpay-order', {
+                body: input,
+            });
 
-            // For demo, simulate a payment intent
-            await new Promise(resolve => setTimeout(resolve, 500));
+            if (error) throw error;
+            if (data.error) throw new Error(data.error);
 
-            return {
-                clientSecret: `pi_demo_${Date.now()}_secret_${Math.random().toString(36).slice(2)}`,
-                paymentIntentId: `pi_demo_${Date.now()}`,
-            };
+            return data as RazorpayOrderResponse;
         },
     });
 }
 
-// Confirm payment after Stripe Elements submission
-export function useConfirmPayment() {
+// Verify payment after Razorpay checkout
+export function useVerifyRazorpayPayment() {
     const supabase = getSupabaseClient();
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({
-            bookingId,
-            paymentIntentId
-        }: {
-            bookingId: string;
-            paymentIntentId: string;
-        }): Promise<Booking> => {
+        mutationFn: async (payload: {
+            razorpay_order_id: string;
+            razorpay_payment_id: string;
+            razorpay_signature: string;
+            booking_id: string;
+        }): Promise<{ success: boolean }> => {
             if (!supabase) throw new Error('Supabase not configured');
 
-            // Update booking with payment info
-            const { data, error } = await supabase
-                .from('bookings')
-                .update({
-                    payment_status: 'completed',
-                    stripe_payment_intent_id: paymentIntentId,
-                    status: 'confirmed', // Auto-confirm after payment
-                })
-                .eq('id', bookingId)
-                .select()
-                .single();
+            const { data, error } = await supabase.functions.invoke('verify-razorpay-payment', {
+                body: payload,
+            });
 
             if (error) throw error;
+            if (!data.success) throw new Error(data.error || 'Payment verification failed');
+
             return data;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['bookings'] });
             queryClient.invalidateQueries({ queryKey: [PAYMENTS_KEY] });
         },
+    });
+}
+
+// Hook to open Razorpay checkout
+export function useRazorpayCheckout() {
+    const createOrder = useCreateRazorpayOrder();
+    const verifyPayment = useVerifyRazorpayPayment();
+
+    const openCheckout = async (
+        input: CreateOrderInput,
+        onSuccess?: () => void,
+        onError?: (error: Error) => void
+    ) => {
+        try {
+            const orderData = await createOrder.mutateAsync(input);
+
+            // Load Razorpay script if not already loaded
+            if (!(window as any).Razorpay) {
+                await loadRazorpayScript();
+            }
+
+            const options = {
+                key: orderData.keyId,
+                amount: orderData.amount,
+                currency: orderData.currency,
+                name: 'Interview Ace',
+                description: `${orderData.notes.interviewType} Interview`,
+                order_id: orderData.orderId,
+                prefill: orderData.prefill,
+                theme: orderData.theme,
+                handler: async function (response: any) {
+                    try {
+                        await verifyPayment.mutateAsync({
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature,
+                            booking_id: input.bookingId,
+                        });
+                        onSuccess?.();
+                    } catch (err) {
+                        onError?.(err as Error);
+                    }
+                },
+                modal: {
+                    ondismiss: function () {
+                        console.log('Payment cancelled by user');
+                    },
+                },
+            };
+
+            const rzp = new (window as any).Razorpay(options);
+            rzp.open();
+        } catch (error) {
+            onError?.(error as Error);
+        }
+    };
+
+    return {
+        openCheckout,
+        isLoading: createOrder.isPending || verifyPayment.isPending,
+        error: createOrder.error || verifyPayment.error,
+    };
+}
+
+// Helper to load Razorpay script
+function loadRazorpayScript(): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if ((window as any).Razorpay) {
+            resolve();
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load Razorpay'));
+        document.body.appendChild(script);
     });
 }
 
@@ -94,17 +179,15 @@ export function useProcessRefund() {
         }): Promise<Booking> => {
             if (!supabase) throw new Error('Supabase not configured');
 
-            // In production, this would:
-            // 1. Call Stripe API to create refund
-            // 2. Update booking status
-
-            const refundId = `re_demo_${Date.now()}`;
+            // For refunds, you would call Razorpay refund API
+            // For now, we just update the booking status
+            const refundId = `rfnd_manual_${Date.now()}`;
 
             const { data, error } = await supabase
                 .from('bookings')
                 .update({
                     payment_status: 'refunded',
-                    stripe_refund_id: refundId,
+                    razorpay_refund_id: refundId,
                     status: 'cancelled',
                     cancellation_reason: reason,
                 })
@@ -135,15 +218,15 @@ export function usePaymentHistory() {
             const { data, error } = await supabase
                 .from('bookings')
                 .select(`
-          id,
-          scheduled_at,
-          interview_type,
-          total_amount_cents,
-          payment_status,
-          stripe_payment_intent_id,
-          created_at,
-          interviewer_profile:interviewer_profiles!bookings_interviewer_id_fkey(company_background)
-        `)
+                    id,
+                    scheduled_at,
+                    interview_type,
+                    total_amount_cents,
+                    payment_status,
+                    razorpay_payment_id,
+                    created_at,
+                    interviewer_profile:interviewer_profiles!bookings_interviewer_id_fkey(company_background)
+                `)
                 .eq('student_id', session.user.id)
                 .neq('payment_status', 'pending')
                 .order('created_at', { ascending: false });
@@ -155,17 +238,21 @@ export function usePaymentHistory() {
     });
 }
 
-// Stripe configuration check
-export function useStripeConfig() {
+// Razorpay configuration check
+export function useRazorpayConfig() {
     return useQuery({
-        queryKey: ['stripe', 'config'],
+        queryKey: ['razorpay', 'config'],
         queryFn: async () => {
-            // In production, this would check if Stripe is configured
-            // For now, we'll simulate it as not configured
+            const keyId = import.meta.env.VITE_RAZORPAY_KEY_ID;
+
             return {
-                isConfigured: false,
-                publishableKey: null,
+                isConfigured: Boolean(keyId),
+                keyId: keyId || null,
             };
         },
     });
 }
+
+// Legacy exports for backward compatibility
+export const useStripeConfig = useRazorpayConfig;
+export const useStripeCheckout = useRazorpayCheckout;
