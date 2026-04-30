@@ -54,7 +54,7 @@ serve(async (req) => {
             body: JSON.stringify({
                 amount: amountPaise,
                 currency: "INR",
-                receipt: `booking_${bookingId}`,
+                receipt: bookingId.substring(0, 40),
                 notes: {
                     booking_id: bookingId,
                     interviewer_id: interviewerId,
@@ -112,7 +112,7 @@ serve(async (req) => {
             JSON.stringify({ error: error.message }),
             {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
-                status: 400,
+                status: 200,
             }
         );
     }
