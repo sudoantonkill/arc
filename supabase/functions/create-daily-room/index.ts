@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const DAILY_API_KEY = Deno.env.get("DAILY_API_KEY");
@@ -7,7 +6,8 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 interface CreateRoomRequest {
@@ -16,10 +16,10 @@ interface CreateRoomRequest {
     durationMinutes: number;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
     // Handle CORS preflight
     if (req.method === "OPTIONS") {
-        return new Response(null, { headers: corsHeaders });
+        return new Response("ok", { headers: corsHeaders, status: 200 });
     }
 
     try {
@@ -29,11 +29,15 @@ serve(async (req) => {
 
         const { bookingId, scheduledAt, durationMinutes }: CreateRoomRequest = await req.json();
 
-        // Calculate room expiry (scheduled time + duration + 1 hour buffer)
+        // Calculate room expiry (scheduled time + duration + 2 hour buffer)
         const scheduledDate = new Date(scheduledAt);
-        const expiryTime = new Date(scheduledDate.getTime() + (durationMinutes + 60) * 60 * 1000);
+        const expiryTime = new Date(scheduledDate.getTime() + (durationMinutes + 120) * 60 * 1000);
 
-        // Create Daily.co room
+        // Use short room name (Daily limits to ~40 chars)
+        const shortId = bookingId.replace(/-/g, "").substring(0, 16);
+        const roomName = `iv-${shortId}`;
+
+        // Create Daily.co room — PUBLIC so both participants can join freely
         const roomResponse = await fetch("https://api.daily.co/v1/rooms", {
             method: "POST",
             headers: {
@@ -41,26 +45,16 @@ serve(async (req) => {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                name: `interview-${bookingId}`,
-                privacy: "private",
+                name: roomName,
+                privacy: "public",
                 properties: {
-                    // Room expires after the interview
                     exp: Math.floor(expiryTime.getTime() / 1000),
-                    // Enable recording (optional)
-                    enable_recording: "cloud",
-                    // Enable chat
                     enable_chat: true,
-                    // Enable screenshare
                     enable_screenshare: true,
-                    // Start with video on
                     start_video_off: false,
-                    // Start with audio on
                     start_audio_off: false,
-                    // Max participants (interviewer + student)
-                    max_participants: 2,
-                    // Enable knocking for waiting room
-                    enable_knocking: true,
-                    // Allowed to join before host
+                    max_participants: 4,
+                    enable_knocking: false,
                     enable_prejoin_ui: true,
                 },
             }),
@@ -69,26 +63,8 @@ serve(async (req) => {
         const room = await roomResponse.json();
 
         if (room.error) {
-            throw new Error(room.error.message || "Failed to create Daily.co room");
+            throw new Error(room.error.description || room.error.message || JSON.stringify(room.error));
         }
-
-        // Create meeting tokens for participants (optional but recommended for private rooms)
-        const tokenResponse = await fetch("https://api.daily.co/v1/meeting-tokens", {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${DAILY_API_KEY}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                properties: {
-                    room_name: room.name,
-                    exp: Math.floor(expiryTime.getTime() / 1000),
-                    is_owner: false,
-                },
-            }),
-        });
-
-        const token = await tokenResponse.json();
 
         // Update booking with meeting link
         const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -109,7 +85,6 @@ serve(async (req) => {
             JSON.stringify({
                 roomUrl: room.url,
                 roomName: room.name,
-                token: token.token,
             }),
             {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -119,10 +94,10 @@ serve(async (req) => {
     } catch (error) {
         console.error("Create room error:", error);
         return new Response(
-            JSON.stringify({ error: error.message }),
+            JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
             {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
-                status: 400,
+                status: 200,
             }
         );
     }

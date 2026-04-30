@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useBookings, useConfirmBookingTime, useUpdateBookingStatus } from "@/hooks/useBookings";
+import { useCreateDailyRoom } from "@/hooks/useDaily";
 import { Calendar, Clock, User, IndianRupee, CheckCircle, XCircle, Briefcase, Video, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "react-router-dom";
@@ -16,22 +17,28 @@ export default function BookingRequests() {
     const { data: allBookings = [], isLoading } = useBookings({ role: 'interviewer' });
     const confirmBookingTime = useConfirmBookingTime();
     const updateStatus = useUpdateBookingStatus();
-    const [meetingLinks, setMeetingLinks] = React.useState<Record<string, string>>({});
+    const createDailyRoom = useCreateDailyRoom();
 
     const pendingBookings = allBookings.filter(b => b.status === 'pending');
     const confirmedBookings = allBookings.filter(b => ['confirmed', 'in_progress'].includes(b.status));
 
-    const handleConfirmTime = async (bookingId: string, scheduledAt: string) => {
+    const handleConfirmTime = async (booking: any, scheduledAt: string) => {
         try {
-            const meetLink = meetingLinks[bookingId] || '';
-            await confirmBookingTime.mutateAsync({
-                bookingId,
+            // Automatically create a Daily.co room for this booking
+            const roomData = await createDailyRoom.mutateAsync({
+                bookingId: booking.id,
                 scheduledAt,
-                meetingLink: meetLink || undefined,
+                durationMinutes: booking.duration_minutes || 60,
             });
-            toast({ title: "Booking confirmed!", description: "The student will be notified." });
+
+            await confirmBookingTime.mutateAsync({
+                bookingId: booking.id,
+                scheduledAt,
+                meetingLink: roomData.roomUrl,
+            });
+            toast({ title: "Booking confirmed!", description: "Video room created and student notified." });
         } catch (error) {
-            toast({ title: "Failed to confirm booking", variant: "destructive" });
+            toast({ title: "Failed to confirm booking", description: error instanceof Error ? error.message : "Unknown error", variant: "destructive" });
         }
     };
 
@@ -163,7 +170,7 @@ export default function BookingRequests() {
                                                                 key={index}
                                                                 variant="outline"
                                                                 className="h-auto py-3 flex flex-col gap-1 hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-950/30"
-                                                                onClick={() => handleConfirmTime(booking.id, slotDate.toISOString())}
+                                                                onClick={() => handleConfirmTime(booking, slotDate.toISOString())}
                                                                 disabled={confirmBookingTime.isPending}
                                                             >
                                                                 <span className="font-medium">
@@ -187,7 +194,7 @@ export default function BookingRequests() {
                                                 </div>
                                                 <Button
                                                     size="sm"
-                                                    onClick={() => handleConfirmTime(booking.id, booking.scheduled_at)}
+                                                    onClick={() => handleConfirmTime(booking, booking.scheduled_at)}
                                                     disabled={confirmBookingTime.isPending}
                                                 >
                                                     <CheckCircle className="h-4 w-4 mr-1" />
@@ -250,10 +257,10 @@ export default function BookingRequests() {
                                                 : booking.student_profile?.education || 'Student'}
                                         </div>
                                     </div>
-                                    <Button variant="default" asChild>
+                                    <Button variant="default" asChild className="bg-green-600 hover:bg-green-700">
                                         <Link to={`/app/interview/${booking.id}`}>
                                             <Video className="h-4 w-4 mr-2" />
-                                            Join Room
+                                            Join Now
                                         </Link>
                                     </Button>
                                 </div>

@@ -281,12 +281,11 @@ export default function UpcomingSessions() {
                                                 {booking.status === 'confirmed' && (
                                                     <Button
                                                         asChild
-                                                        disabled={!canJoin}
-                                                        className={canJoin ? 'bg-green-600 hover:bg-green-700' : ''}
+                                                        className='bg-green-600 hover:bg-green-700'
                                                     >
                                                         <Link to={`/app/interview/${booking.id}`}>
                                                             <Video className="h-4 w-4 mr-2" />
-                                                            {canJoin ? 'Join Now' : 'Join Room'}
+                                                            Join Now
                                                         </Link>
                                                     </Button>
                                                 )}
