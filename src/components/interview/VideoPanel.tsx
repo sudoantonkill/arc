@@ -12,9 +12,10 @@ import {
 interface VideoPanelProps {
     bookingId: string;
     isStarted: boolean;
+    isInterviewer?: boolean;
 }
 
-export default function VideoPanel({ bookingId, isStarted }: VideoPanelProps) {
+export default function VideoPanel({ bookingId, isStarted, isInterviewer = false }: VideoPanelProps) {
     const { session } = useSession();
     const { data: meetingRoom, isLoading: isLoadingRoom } = useMeetingRoom(bookingId);
 
@@ -22,6 +23,23 @@ export default function VideoPanel({ bookingId, isStarted }: VideoPanelProps) {
     const [isFullscreen, setIsFullscreen] = React.useState(false);
 
     const hasRoomUrl = Boolean(meetingRoom?.meeting_link);
+
+    // Build role-aware Jitsi URL with config params
+    const getJitsiUrl = React.useCallback(() => {
+        if (!meetingRoom?.meeting_link) return '';
+        const baseUrl = meetingRoom.meeting_link;
+        const displayName = isInterviewer ? 'Interviewer' : 'Candidate';
+        // Interviewers: show prejoin so they set up first (they become moderator as first joiner)
+        // Students: skip prejoin, auto-join directly as participant
+        const configParams = [
+            `userInfo.displayName="${displayName}"`,
+            `config.prejoinConfig.enabled=${isInterviewer ? 'true' : 'false'}`,
+            'config.startWithAudioMuted=false',
+            'config.startWithVideoMuted=false',
+            'config.disableDeepLinking=true',
+        ];
+        return `${baseUrl}#${configParams.join('&')}`;
+    }, [meetingRoom?.meeting_link, isInterviewer]);
 
     // Toggle fullscreen
     const toggleFullscreen = () => {
@@ -36,10 +54,11 @@ export default function VideoPanel({ bookingId, isStarted }: VideoPanelProps) {
         }
     };
 
-    // Open Daily.co room in new window
+    // Open video room in new window
     const openInNewWindow = () => {
-        if (meetingRoom?.meeting_link) {
-            window.open(meetingRoom.meeting_link, '_blank', 'width=1200,height=800');
+        const url = getJitsiUrl();
+        if (url) {
+            window.open(url, '_blank', 'width=1200,height=800');
         }
     };
 
@@ -70,14 +89,14 @@ export default function VideoPanel({ bookingId, isStarted }: VideoPanelProps) {
         );
     }
 
-    // If we have a Daily.co room URL, embed it directly — both users join the same room
+    // If we have a Jitsi room URL, embed it directly — both users join the same room
     if (hasRoomUrl) {
         return (
             <div ref={containerRef} className="h-full flex flex-col bg-zinc-900">
-                {/* Daily.co Embed — this is the actual shared video call */}
+                {/* Jitsi Meet Embed — this is the actual shared video call */}
                 <div className="flex-1 relative">
                     <iframe
-                        src={meetingRoom!.meeting_link!}
+                        src={getJitsiUrl()}
                         allow="camera; microphone; fullscreen; speaker; display-capture; autoplay"
                         className="absolute inset-0 w-full h-full border-0"
                         title="Video Interview"
@@ -87,7 +106,7 @@ export default function VideoPanel({ bookingId, isStarted }: VideoPanelProps) {
                 {/* Controls bar */}
                 <div className="p-2 bg-zinc-950 flex items-center justify-between">
                     <span className="text-xs text-zinc-500">
-                        Daily.co Video Room — Both participants see each other here
+                        Video Room — Both participants see each other here
                     </span>
 
                     <div className="flex items-center gap-2">

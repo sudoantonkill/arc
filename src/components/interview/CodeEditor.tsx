@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Play, RotateCcw, Moon, Sun } from "lucide-react";
+import { Copy, Play, RotateCcw, Moon, Sun, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useCodeSession } from "@/hooks/useCodeSession";
 
@@ -125,6 +125,7 @@ export default function CodeEditor({ bookingId, readOnly = false }: CodeEditorPr
     const [code, setCode] = React.useState(DEFAULT_CODE.javascript);
     const [theme, setTheme] = React.useState<'dark' | 'light'>('dark');
     const [output, setOutput] = React.useState<string>('');
+    const [isExecuting, setIsExecuting] = React.useState<boolean>(false);
     const textareaRef = React.useRef<HTMLTextAreaElement>(null);
     const lastUpdateRef = React.useRef<number>(0);
 
@@ -186,23 +187,62 @@ export default function CodeEditor({ bookingId, readOnly = false }: CodeEditorPr
         updateCode.mutate({ code: nextCode, language });
     };
 
-    const handleRun = () => {
-        // Simulated code execution (in a real app, this would call an API)
+    const handleRun = async () => {
+        setIsExecuting(true);
+        setOutput('Running...');
+
         try {
             if (language === 'javascript' || language === 'typescript') {
-                // Very basic JS evaluation (not safe for production!)
                 const logs: string[] = [];
                 const mockConsole = {
-                    log: (...args: unknown[]) => logs.push(args.map(String).join(' ')),
+                    log: (...args: unknown[]) => logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')),
+                    error: (...args: unknown[]) => logs.push('ERROR: ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')),
+                    warn: (...args: unknown[]) => logs.push('WARN: ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')),
                 };
-                const wrappedCode = `(function(console) { ${code} })(mockConsole)`;
-                eval(wrappedCode.replace('mockConsole', JSON.stringify(mockConsole)));
+
+                const fn = new Function('console', `
+                    try {
+                        ${code}
+                    } catch(e) {
+                        console.error(e);
+                    }
+                `);
+                fn(mockConsole);
                 setOutput(logs.join('\n') || 'Code executed (no output)');
+
+            } else if (language === 'python') {
+                const logs: string[] = [];
+                
+                if (!(window as any).loadPyodide) {
+                    setOutput('Loading Python runtime (this may take a moment on first run)...');
+                    await new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = 'https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js';
+                        script.onload = resolve;
+                        script.onerror = reject;
+                        document.body.appendChild(script);
+                    });
+                }
+                
+                if (!(window as any).pyodide) {
+                    (window as any).pyodide = await (window as any).loadPyodide();
+                }
+                
+                const pyodide = (window as any).pyodide;
+                pyodide.setStdout({ batched: (text: string) => logs.push(text) });
+                pyodide.setStderr({ batched: (text: string) => logs.push('ERROR: ' + text) });
+                
+                await pyodide.runPythonAsync(code);
+                
+                setOutput(logs.join('\n') || 'Code executed (no output)');
+
             } else {
-                setOutput('⚠️ Code execution is only available for JavaScript in this demo.\n\nIn the full version, code would be executed on a secure server.');
+                setOutput(\`⚠️ Live browser execution is currently supported for JavaScript, TypeScript, and Python.\\n\\nIn a full production environment, \${LANGUAGES.find(l => l.value === language)?.label} would execute on secure backend workers.\`);
             }
         } catch (error) {
-            setOutput(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            setOutput(\`Error: \${error instanceof Error ? error.message : String(error)}\`);
+        } finally {
+            setIsExecuting(false);
         }
     };
 
@@ -258,9 +298,9 @@ export default function CodeEditor({ bookingId, readOnly = false }: CodeEditorPr
                     <Button variant="ghost" size="sm" onClick={handleReset}>
                         <RotateCcw className="h-4 w-4" />
                     </Button>
-                    <Button size="sm" onClick={handleRun}>
-                        <Play className="h-4 w-4 mr-1" />
-                        Run
+                    <Button size="sm" onClick={handleRun} disabled={isExecuting || readOnly}>
+                        {isExecuting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Play className="h-4 w-4 mr-1" />}
+                        {isExecuting ? 'Running...' : 'Run'}
                     </Button>
                 </div>
             </div>

@@ -24,7 +24,7 @@ export default function BookingRequests() {
 
     const handleConfirmTime = async (booking: any, scheduledAt: string) => {
         try {
-            // Automatically create a Daily.co room for this booking
+            // Automatically create a Jitsi Meet room for this booking
             const roomData = await createDailyRoom.mutateAsync({
                 bookingId: booking.id,
                 scheduledAt,
@@ -258,7 +258,7 @@ export default function BookingRequests() {
                                         </div>
                                     </div>
                                     <Button variant="default" asChild className="bg-green-600 hover:bg-green-700">
-                                        <Link to={`/app/interview/${booking.id}`}>
+                                        <Link to={`/app/interview/${booking.id}?role=interviewer`}>
                                             <Video className="h-4 w-4 mr-2" />
                                             Join Now
                                         </Link>

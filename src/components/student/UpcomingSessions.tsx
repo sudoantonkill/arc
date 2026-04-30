@@ -278,12 +278,12 @@ export default function UpcomingSessions() {
                                                     </AlertDialog>
                                                 )}
 
-                                                {booking.status === 'confirmed' && (
+                                                {(booking.status === 'confirmed' || booking.status === 'in_progress') && (
                                                     <Button
                                                         asChild
                                                         className='bg-green-600 hover:bg-green-700'
                                                     >
-                                                        <Link to={`/app/interview/${booking.id}`}>
+                                                        <Link to={`/app/interview/${booking.id}?role=student`}>
                                                             <Video className="h-4 w-4 mr-2" />
                                                             Join Now
                                                         </Link>

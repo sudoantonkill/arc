@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -43,8 +43,22 @@ export default function InterviewRoom() {
     const [isInterviewEnded, setIsInterviewEnded] = React.useState(false);
     const [showFeedbackForm, setShowFeedbackForm] = React.useState(false);
 
-    const isInterviewer = roles.includes('interviewer');
-    const isStudent = roles.includes('student');
+    const [searchParams] = useSearchParams();
+    const activeRole = searchParams.get('role');
+
+    // Check roles based on this specific booking and the URL ?role parameter
+    // This allows users testing with dual-role accounts to force a specific view
+    const isInterviewer = activeRole === 'interviewer' || (booking?.interviewer_id === session?.user.id && activeRole !== 'student');
+    const isStudent = activeRole === 'student' || (booking?.student_id === session?.user.id && activeRole !== 'interviewer');
+
+    // Sync from database status
+    React.useEffect(() => {
+        if (booking?.status === 'in_progress') {
+            setIsInterviewStarted(true);
+        } else if (booking?.status === 'completed') {
+            setIsInterviewEnded(true);
+        }
+    }, [booking?.status]);
 
     // Timer
     React.useEffect(() => {
@@ -230,11 +244,17 @@ export default function InterviewRoom() {
                     )}
 
                     {!isInterviewStarted ? (
-                        <Button onClick={handleStartInterview} disabled={updateStatus.isPending}>
-                            Start Interview
-                        </Button>
+                        isInterviewer ? (
+                            <Button onClick={handleStartInterview} disabled={updateStatus.isPending}>
+                                Start Interview
+                            </Button>
+                        ) : (
+                            <Badge variant="outline" className="px-3 py-1">
+                                Waiting for interviewer to start...
+                            </Badge>
+                        )
                     ) : (
-                        <Button variant="destructive" onClick={handleEndInterview} disabled={updateStatus.isPending}>
+                        <Button variant="destructive" onClick={handleEndInterview} disabled={updateStatus.isPending || (isStudent && !isInterviewer)}>
                             End Interview
                         </Button>
                     )}
@@ -249,6 +269,7 @@ export default function InterviewRoom() {
                         <VideoPanel
                             bookingId={bookingId ?? ''}
                             isStarted={isInterviewStarted}
+                            isInterviewer={isInterviewer}
                         />
                     </div>
                 </ResizablePanel>
