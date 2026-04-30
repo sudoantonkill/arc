@@ -42,6 +42,8 @@ export default function StudentDashboard() {
   const [interviewTypes, setInterviewTypes] = React.useState<string[]>([]);
   const [timezone, setTimezone] = React.useState("");
   const [isProfileLoading, setIsProfileLoading] = React.useState(true);
+  // Only flip to true after DB confirms complete OR user explicitly saves
+  const [profileSetupDone, setProfileSetupDone] = React.useState(false);
 
   React.useEffect(() => {
     if (!supabase || !session) return;
@@ -54,6 +56,10 @@ export default function StudentDashboard() {
         setTargetCompanies(data.target_companies ?? []);
         setInterviewTypes(data.interview_types ?? []);
         setTimezone(data.timezone ?? "");
+        // Check if DB profile is already complete
+        if ((data.education ?? '').trim() !== '') {
+          setProfileSetupDone(true);
+        }
       }
       setIsProfileLoading(false);
     })();
@@ -80,6 +86,8 @@ export default function StudentDashboard() {
       const { data } = await supabase.from("student_profiles").select("*").eq("user_id", session.user.id).maybeSingle();
       if (data) setProfile(data);
       toast({ title: "Profile saved" });
+      // Mark setup as done so we transition to full dashboard
+      setProfileSetupDone(true);
     }
   };
 
@@ -100,7 +108,8 @@ export default function StudentDashboard() {
   };
 
   // Check if profile is complete (education is required)
-  const isProfileComplete = profile && education.trim() !== '';
+  // This is only used for the save button disabled state, not for view switching
+  const isFormValid = education.trim() !== '';
 
   // Show loading state
   if (isProfileLoading) {
@@ -114,7 +123,7 @@ export default function StudentDashboard() {
   }
 
   // If profile is incomplete, show only the profile section with a warning
-  if (!isProfileComplete) {
+  if (!profileSetupDone) {
     return (
       <main className="container py-10">
         <header className="space-y-2 mb-8">
@@ -216,7 +225,7 @@ export default function StudentDashboard() {
             </div>
 
             <div className="flex justify-end pt-4">
-              <Button onClick={handleSave} size="lg" disabled={!education.trim()}>
+              <Button onClick={handleSave} size="lg" disabled={!isFormValid}>
                 Save Profile & Continue
               </Button>
             </div>

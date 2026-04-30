@@ -83,8 +83,11 @@ export function useUpcomingBookings(role: 'student' | 'interviewer') {
         queryFn: async (): Promise<BookingWithDetails[]> => {
             if (!supabase || !session) return [];
 
-            const now = new Date().toISOString();
             const columnName = role === 'student' ? 'student_id' : 'interviewer_id';
+            // Include 'pending' so students can see their bookings immediately
+            const statuses = role === 'student'
+                ? ['pending', 'confirmed', 'in_progress']
+                : ['confirmed', 'in_progress'];
 
             const { data, error } = await supabase
                 .from('bookings')
@@ -94,9 +97,31 @@ export function useUpcomingBookings(role: 'student' | 'interviewer') {
           interviewer_profile:interviewer_profiles!bookings_interviewer_id_fkey(*)
         `)
                 .eq(columnName, session.user.id)
-                .in('status', ['confirmed', 'in_progress'])
-                .gte('scheduled_at', now)
+                .in('status', statuses)
                 .order('scheduled_at', { ascending: true });
+
+            if (error) throw error;
+            return data ?? [];
+        },
+        enabled: !!supabase && !!session,
+    });
+}
+
+// Fetch active bookings for a student (for filtering interviewers on homepage)
+export function useStudentActiveBookings() {
+    const { session } = useSession();
+    const supabase = getSupabaseClient();
+
+    return useQuery({
+        queryKey: [BOOKINGS_KEY, 'active', 'student', session?.user?.id],
+        queryFn: async (): Promise<{ interviewer_id: string; status: string }[]> => {
+            if (!supabase || !session) return [];
+
+            const { data, error } = await supabase
+                .from('bookings')
+                .select('interviewer_id, status')
+                .eq('student_id', session.user.id)
+                .in('status', ['pending', 'confirmed', 'in_progress']);
 
             if (error) throw error;
             return data ?? [];
@@ -153,8 +178,8 @@ export function useCreateBooking() {
 
             if (intError || !interviewer) throw new Error('Interviewer not found');
 
-            // Calculate pricing
-            const hourlyRate = interviewer.hourly_rate_cents ?? 5000; // Default $50/hr
+            // Calculate pricing (in paise for INR)
+            const hourlyRate = interviewer.hourly_rate_cents ?? 50000; // Default ₹500/hr
             const durationHours = input.duration_minutes / 60;
             const totalAmount = Math.round(hourlyRate * durationHours);
             const platformFee = Math.round(totalAmount * 0.5); // 50% commission
@@ -170,12 +195,51 @@ export function useCreateBooking() {
                     interview_type: input.interview_type,
                     target_company: input.target_company,
                     student_notes: input.student_notes,
+                    proposed_times: input.proposed_times ?? [],
                     total_amount_cents: totalAmount,
                     platform_fee_cents: platformFee,
                     interviewer_amount_cents: interviewerAmount,
                     status: 'pending',
                     payment_status: 'pending',
                 })
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: [BOOKINGS_KEY] });
+        },
+    });
+}
+
+// Interviewer confirms a booking by picking one of the proposed times
+export function useConfirmBookingTime() {
+    const supabase = getSupabaseClient();
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({ bookingId, scheduledAt, meetingLink }: {
+            bookingId: string;
+            scheduledAt: string;
+            meetingLink?: string;
+        }): Promise<Booking> => {
+            if (!supabase) throw new Error('Supabase not configured');
+
+            const updateData: Record<string, unknown> = {
+                status: 'confirmed',
+                scheduled_at: scheduledAt,
+            };
+
+            if (meetingLink) {
+                updateData.meeting_link = meetingLink;
+            }
+
+            const { data, error } = await supabase
+                .from('bookings')
+                .update(updateData)
+                .eq('id', bookingId)
                 .select()
                 .single();
 

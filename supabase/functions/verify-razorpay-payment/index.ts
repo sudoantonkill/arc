@@ -6,6 +6,11 @@ const RAZORPAY_KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
 // Verify Razorpay signature
 function verifySignature(
     orderId: string,
@@ -21,6 +26,11 @@ function verifySignature(
 }
 
 serve(async (req) => {
+    // Handle CORS preflight
+    if (req.method === "OPTIONS") {
+        return new Response(null, { headers: corsHeaders });
+    }
+
     try {
         if (!RAZORPAY_KEY_SECRET) {
             throw new Error("Razorpay secret not configured");
@@ -65,7 +75,6 @@ serve(async (req) => {
             .from("bookings")
             .update({
                 payment_status: "completed",
-                status: "confirmed",
                 razorpay_payment_id: razorpay_payment_id,
             })
             .eq("id", booking_id);
@@ -95,7 +104,7 @@ serve(async (req) => {
             // Create transaction record
             await supabase.from("wallet_transactions").insert({
                 wallet_id: wallet.id,
-                type: "earning",
+                type: "credit",
                 amount_cents: interviewerAmount,
                 balance_after_cents: wallet.balance_cents,
                 description: `Interview booking payment`,
@@ -108,7 +117,7 @@ serve(async (req) => {
         return new Response(
             JSON.stringify({ success: true, bookingId: booking_id }),
             {
-                headers: { "Content-Type": "application/json" },
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
                 status: 200,
             }
         );
@@ -117,7 +126,7 @@ serve(async (req) => {
         return new Response(
             JSON.stringify({ success: false, error: error.message }),
             {
-                headers: { "Content-Type": "application/json" },
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
                 status: 400,
             }
         );

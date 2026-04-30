@@ -17,6 +17,12 @@ export interface UserRole {
 
 export interface StudentProfile {
     user_id: string;
+    first_name: string | null;
+    last_name: string | null;
+    linkedin_url: string | null;
+    github_url: string | null;
+    phone_country_code: string | null;
+    phone_number: string | null;
     education: string | null;
     target_companies: string[];
     interview_types: string[];
@@ -27,6 +33,12 @@ export interface StudentProfile {
 
 export interface InterviewerProfile {
     user_id: string;
+    first_name: string | null;
+    last_name: string | null;
+    linkedin_url: string | null;
+    github_url: string | null;
+    phone_country_code: string | null;
+    phone_number: string | null;
     company_background: string | null;
     years_experience: number | null;
     specialties: string[];
@@ -54,6 +66,11 @@ export interface AvailabilitySlot {
     updated_at: string;
 }
 
+export interface ProposedTimeSlot {
+    date: string; // ISO date string e.g. '2026-05-01'
+    time: string; // HH:MM format e.g. '14:00'
+}
+
 export interface Booking {
     id: string;
     student_id: string;
@@ -71,6 +88,10 @@ export interface Booking {
     interviewer_amount_cents: number;
     stripe_payment_intent_id: string | null;
     stripe_refund_id: string | null;
+    razorpay_order_id: string | null;
+    razorpay_payment_id: string | null;
+    razorpay_refund_id: string | null;
+    proposed_times: ProposedTimeSlot[];
     student_notes: string | null;
     cancelled_by: 'student' | 'interviewer' | 'admin' | null;
     cancellation_reason: string | null;
@@ -206,6 +227,7 @@ export interface CreateBookingInput {
     interview_type: string;
     target_company?: string;
     student_notes?: string;
+    proposed_times?: ProposedTimeSlot[];
 }
 
 export interface SubmitFeedbackInput {

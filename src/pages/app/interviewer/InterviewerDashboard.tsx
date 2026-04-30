@@ -99,6 +99,8 @@ export default function InterviewerDashboard() {
   }, [allBookings]);
 
   const [isProfileLoading, setIsProfileLoading] = React.useState(true);
+  // Only flip to true after DB confirms complete OR user explicitly saves
+  const [profileSetupDone, setProfileSetupDone] = React.useState(false);
 
   React.useEffect(() => {
     if (!supabase || !session) return;
@@ -121,6 +123,15 @@ export default function InterviewerDashboard() {
         setBio(data.bio ?? "");
         setRate((data.hourly_rate_cents ?? 0).toString());
         setTimezone(data.timezone ?? "");
+        // Check if DB profile is already complete (don't use live state)
+        const dbComplete = 
+          (data.company_background ?? '').trim() !== '' &&
+          (data.bio ?? '').trim() !== '' &&
+          (data.hourly_rate_cents ?? 0) > 0 &&
+          (data.specialties ?? []).length > 0;
+        if (dbComplete) {
+          setProfileSetupDone(true);
+        }
       }
       setIsProfileLoading(false);
     })();
@@ -157,6 +168,8 @@ export default function InterviewerDashboard() {
       const { data } = await supabase.from("interviewer_profiles").select("*").eq("user_id", session.user.id).maybeSingle();
       if (data) setProfile(data);
       toast({ title: "Profile saved" });
+      // Mark setup as done so we transition to full dashboard
+      setProfileSetupDone(true);
     }
   };
 
@@ -171,13 +184,6 @@ export default function InterviewerDashboard() {
   const isPending = profile?.verification_status === 'pending';
   const isApproved = profile?.verification_status === 'approved';
 
-  // Check if profile is complete
-  const isProfileComplete = profile &&
-    company.trim() !== '' &&
-    bio.trim() !== '' &&
-    parseInt(rate, 10) > 0 &&
-    specialties.length > 0;
-
   // Show loading state
   if (isProfileLoading) {
     return (
@@ -190,7 +196,7 @@ export default function InterviewerDashboard() {
   }
 
   // If profile is incomplete, show only the profile form
-  if (!isProfileComplete) {
+  if (!profileSetupDone) {
     return (
       <main className="container py-10">
         <header className="space-y-2 mb-6">

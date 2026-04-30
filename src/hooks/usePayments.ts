@@ -252,7 +252,3 @@ export function useRazorpayConfig() {
         },
     });
 }
-
-// Legacy exports for backward compatibility
-export const useStripeConfig = useRazorpayConfig;
-export const useStripeCheckout = useRazorpayCheckout;

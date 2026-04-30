@@ -11,9 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useInterviewer, useInterviewerAvailability } from "@/hooks/useInterviewers";
 import { useCreateBooking } from "@/hooks/useBookings";
+import { useRazorpayCheckout, useRazorpayConfig } from "@/hooks/usePayments";
+import { useSession } from "@/hooks/useSession";
 import { useToast } from "@/hooks/use-toast";
-import { INTERVIEW_TYPES, TARGET_COMPANIES, DAYS_OF_WEEK } from "@/types/database";
-import { formatCents } from "@/hooks/useWallet";
+import { INTERVIEW_TYPES, TARGET_COMPANIES, DAYS_OF_WEEK, ProposedTimeSlot } from "@/types/database";
 import {
     Star,
     Briefcase,
@@ -22,7 +23,10 @@ import {
     ArrowLeft,
     Calendar as CalendarIcon,
     CheckCircle,
-    Loader2
+    Loader2,
+    CreditCard,
+    Plus,
+    X
 } from "lucide-react";
 import { format, addDays, setHours, setMinutes, isBefore, startOfDay, parse } from "date-fns";
 
@@ -30,18 +34,23 @@ export default function InterviewerDetailPage() {
     const { interviewerId } = useParams<{ interviewerId: string }>();
     const navigate = useNavigate();
     const { toast } = useToast();
+    const { session } = useSession();
 
     const { data: interviewer, isLoading } = useInterviewer(interviewerId ?? '');
     const { data: availability = [] } = useInterviewerAvailability(interviewerId ?? '');
     const createBooking = useCreateBooking();
+    const { data: razorpayConfig } = useRazorpayConfig();
+    const { openCheckout, isLoading: isPaymentLoading } = useRazorpayCheckout();
 
     const [selectedDate, setSelectedDate] = React.useState<Date | undefined>();
     const [selectedTime, setSelectedTime] = React.useState<string>("");
+    const [proposedSlots, setProposedSlots] = React.useState<ProposedTimeSlot[]>([]);
     const [interviewType, setInterviewType] = React.useState<string>("");
     const [targetCompany, setTargetCompany] = React.useState<string>("");
     const [duration, setDuration] = React.useState<string>("60");
     const [notes, setNotes] = React.useState<string>("");
-    const [step, setStep] = React.useState<'details' | 'booking' | 'confirm'>('details');
+    const [step, setStep] = React.useState<'details' | 'payment' | 'confirm'>('details');
+    const [createdBookingId, setCreatedBookingId] = React.useState<string>("");
 
     // Get available times for selected date
     const availableTimesForDate = React.useMemo(() => {
@@ -83,31 +92,92 @@ export default function InterviewerDetailPage() {
             .map(slot => slot.day_of_week);
     }, [availability]);
 
+    // Add a proposed time slot
+    const addProposedSlot = () => {
+        if (!selectedDate || !selectedTime) return;
+        const dateStr = format(selectedDate, 'yyyy-MM-dd');
+        // Check if already added
+        if (proposedSlots.some(s => s.date === dateStr && s.time === selectedTime)) {
+            toast({ title: "This time is already proposed", variant: "destructive" });
+            return;
+        }
+        if (proposedSlots.length >= 3) {
+            toast({ title: "Maximum 3 time slots allowed", variant: "destructive" });
+            return;
+        }
+        setProposedSlots([...proposedSlots, { date: dateStr, time: selectedTime }]);
+        setSelectedTime("");
+    };
+
+    const removeProposedSlot = (index: number) => {
+        setProposedSlots(proposedSlots.filter((_, i) => i !== index));
+    };
+
     const handleBook = async () => {
-        if (!interviewerId || !selectedDate || !selectedTime || !interviewType) {
+        if (!interviewerId || proposedSlots.length === 0 || !interviewType) {
             toast({ title: "Please fill all required fields", variant: "destructive" });
             return;
         }
 
-        const [hours, minutes] = selectedTime.split(':').map(Number);
-        const scheduledAt = setMinutes(setHours(selectedDate, hours), minutes);
+        // Use the first proposed time as the primary scheduled_at
+        const firstSlot = proposedSlots[0];
+        const [hours, minutes] = firstSlot.time.split(':').map(Number);
+        const scheduledDate = new Date(firstSlot.date);
+        const scheduledAt = setMinutes(setHours(scheduledDate, hours), minutes);
 
         try {
-            await createBooking.mutateAsync({
+            const booking = await createBooking.mutateAsync({
                 interviewer_id: interviewerId,
                 scheduled_at: scheduledAt.toISOString(),
                 duration_minutes: parseInt(duration),
                 interview_type: interviewType,
                 target_company: targetCompany || undefined,
                 student_notes: notes || undefined,
+                proposed_times: proposedSlots,
             });
 
-            toast({
-                title: "Booking request sent!",
-                description: "The interviewer will confirm your booking soon."
-            });
+            setCreatedBookingId(booking.id);
 
-            setStep('confirm');
+            // If Razorpay is configured, proceed to payment
+            if (razorpayConfig?.isConfigured && session) {
+                const userEmail = session.user.email ?? '';
+                const userName = session.user.user_metadata?.full_name ?? session.user.email ?? '';
+
+                openCheckout(
+                    {
+                        bookingId: booking.id,
+                        interviewerId: interviewerId,
+                        amountPaise: booking.total_amount_cents,
+                        interviewType: interviewType,
+                        scheduledAt: scheduledAt.toISOString(),
+                        studentName: userName,
+                        studentEmail: userEmail,
+                    },
+                    () => {
+                        toast({
+                            title: "Payment successful!",
+                            description: "Your booking request has been sent to the interviewer."
+                        });
+                        setStep('confirm');
+                    },
+                    (err) => {
+                        toast({
+                            title: "Payment failed",
+                            description: err.message || "Please try again",
+                            variant: "destructive",
+                        });
+                        // Booking is still created with pending payment status
+                        setStep('confirm');
+                    }
+                );
+            } else {
+                // No payment configured — just confirm
+                toast({
+                    title: "Booking request sent!",
+                    description: "The interviewer will confirm your booking soon."
+                });
+                setStep('confirm');
+            }
         } catch (error) {
             toast({
                 title: "Booking failed",
@@ -140,7 +210,7 @@ export default function InterviewerDetailPage() {
         );
     }
 
-    const hourlyRate = (interviewer.hourly_rate_cents ?? 5000) / 100;
+    const hourlyRate = (interviewer.hourly_rate_cents ?? 50000) / 100;
     const sessionCost = (hourlyRate * parseInt(duration)) / 60;
 
     if (step === 'confirm') {
@@ -152,15 +222,27 @@ export default function InterviewerDetailPage() {
                             <CheckCircle className="h-8 w-8 text-green-600" />
                         </div>
                         <h2 className="text-2xl font-bold mb-2">Booking Request Sent!</h2>
-                        <p className="text-muted-foreground mb-6">
-                            Your interview request has been sent to the interviewer.
-                            You'll receive a confirmation once they accept.
+                        <p className="text-muted-foreground mb-4">
+                            Your interview request has been sent to the interviewer with
+                            {proposedSlots.length > 1 ? ` ${proposedSlots.length} proposed times` : ' your proposed time'}.
+                        </p>
+                        <div className="bg-muted/50 rounded-lg p-4 mb-6 text-sm text-left">
+                            <p className="font-medium mb-2">Your proposed times:</p>
+                            {proposedSlots.map((slot, i) => (
+                                <p key={i} className="text-muted-foreground">
+                                    • {format(new Date(slot.date), 'EEEE, MMMM d, yyyy')} at {slot.time}
+                                </p>
+                            ))}
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-6">
+                            The interviewer will pick their preferred time from your options.
+                            You'll be notified once confirmed.
                         </p>
                         <div className="flex gap-4 justify-center">
                             <Button variant="outline" onClick={() => navigate('/app/student')}>
                                 Back to Dashboard
                             </Button>
-                            <Button onClick={() => { setStep('details'); setSelectedDate(undefined); setSelectedTime(''); }}>
+                            <Button onClick={() => { setStep('details'); setProposedSlots([]); setSelectedDate(undefined); setSelectedTime(''); }}>
                                 Book Another
                             </Button>
                         </div>
@@ -236,7 +318,7 @@ export default function InterviewerDetailPage() {
                             <Separator className="my-6" />
 
                             <div className="text-center">
-                                <p className="text-3xl font-bold text-primary">${hourlyRate}</p>
+                                <p className="text-3xl font-bold text-primary">₹{hourlyRate}</p>
                                 <p className="text-sm text-muted-foreground">per hour</p>
                             </div>
                         </CardContent>
@@ -252,7 +334,7 @@ export default function InterviewerDetailPage() {
                                 Book an Interview
                             </CardTitle>
                             <CardDescription>
-                                Select a date, time, and interview type to book your session
+                                Propose up to 3 time slots — the interviewer will pick their preferred one
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
@@ -282,24 +364,69 @@ export default function InterviewerDetailPage() {
                                             No available times for this date
                                         </p>
                                     ) : (
-                                        <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                                            {availableTimesForDate.map(time => (
+                                        <div className="space-y-3">
+                                            <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                                                {availableTimesForDate.map(time => (
+                                                    <Button
+                                                        key={time}
+                                                        variant={selectedTime === time ? "default" : "outline"}
+                                                        size="sm"
+                                                        onClick={() => setSelectedTime(time)}
+                                                    >
+                                                        {time}
+                                                    </Button>
+                                                ))}
+                                            </div>
+
+                                            {selectedTime && (
                                                 <Button
-                                                    key={time}
-                                                    variant={selectedTime === time ? "default" : "outline"}
+                                                    onClick={addProposedSlot}
+                                                    variant="secondary"
                                                     size="sm"
-                                                    onClick={() => setSelectedTime(time)}
+                                                    disabled={proposedSlots.length >= 3}
                                                 >
-                                                    {time}
+                                                    <Plus className="h-4 w-4 mr-1" />
+                                                    Add {format(selectedDate, 'MMM d')} at {selectedTime}
                                                 </Button>
-                                            ))}
+                                            )}
                                         </div>
                                     )}
                                 </div>
                             )}
 
+                            {/* Proposed Slots Display */}
+                            {proposedSlots.length > 0 && (
+                                <div>
+                                    <Label className="mb-3 block">
+                                        Proposed Times ({proposedSlots.length}/3)
+                                    </Label>
+                                    <div className="space-y-2">
+                                        {proposedSlots.map((slot, index) => (
+                                            <div key={index} className="flex items-center justify-between p-3 rounded-lg border bg-primary/5">
+                                                <div className="flex items-center gap-2">
+                                                    <CalendarIcon className="h-4 w-4 text-primary" />
+                                                    <span className="font-medium">
+                                                        {format(new Date(slot.date), 'EEEE, MMM d')} at {slot.time}
+                                                    </span>
+                                                    {index === 0 && (
+                                                        <Badge variant="secondary" className="text-xs">Primary</Badge>
+                                                    )}
+                                                </div>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => removeProposedSlot(index)}
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Interview Details */}
-                            {selectedTime && (
+                            {proposedSlots.length > 0 && (
                                 <>
                                     <Separator />
 
@@ -363,7 +490,7 @@ export default function InterviewerDetailPage() {
                     </Card>
 
                     {/* Booking Summary */}
-                    {selectedDate && selectedTime && interviewType && (
+                    {proposedSlots.length > 0 && interviewType && (
                         <Card>
                             <CardHeader>
                                 <CardTitle>Booking Summary</CardTitle>
@@ -371,12 +498,8 @@ export default function InterviewerDetailPage() {
                             <CardContent>
                                 <div className="space-y-3 text-sm">
                                     <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Date</span>
-                                        <span className="font-medium">{format(selectedDate, 'MMMM d, yyyy')}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Time</span>
-                                        <span className="font-medium">{selectedTime}</span>
+                                        <span className="text-muted-foreground">Proposed Times</span>
+                                        <span className="font-medium">{proposedSlots.length} option{proposedSlots.length > 1 ? 's' : ''}</span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-muted-foreground">Duration</span>
@@ -395,7 +518,7 @@ export default function InterviewerDetailPage() {
                                     <Separator />
                                     <div className="flex justify-between text-base">
                                         <span className="font-medium">Total</span>
-                                        <span className="font-bold text-primary">${sessionCost.toFixed(2)}</span>
+                                        <span className="font-bold text-primary">₹{sessionCost.toFixed(0)}</span>
                                     </div>
                                 </div>
 
@@ -403,19 +526,26 @@ export default function InterviewerDetailPage() {
                                     className="w-full mt-6"
                                     size="lg"
                                     onClick={handleBook}
-                                    disabled={createBooking.isPending}
+                                    disabled={createBooking.isPending || isPaymentLoading}
                                 >
-                                    {createBooking.isPending ? (
+                                    {createBooking.isPending || isPaymentLoading ? (
                                         <>
                                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                            Booking...
+                                            Processing...
+                                        </>
+                                    ) : razorpayConfig?.isConfigured ? (
+                                        <>
+                                            <CreditCard className="h-4 w-4 mr-2" />
+                                            Pay ₹{sessionCost.toFixed(0)} & Book
                                         </>
                                     ) : (
-                                        `Book for $${sessionCost.toFixed(2)}`
+                                        `Book for ₹${sessionCost.toFixed(0)}`
                                     )}
                                 </Button>
                                 <p className="text-xs text-muted-foreground text-center mt-2">
-                                    Payment will be charged after interviewer confirms
+                                    {razorpayConfig?.isConfigured
+                                        ? "Secure payment via Razorpay • UPI, Cards, Net Banking"
+                                        : "Payment will be charged after interviewer confirms"}
                                 </p>
                             </CardContent>
                         </Card>

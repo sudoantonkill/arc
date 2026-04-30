@@ -2,23 +2,33 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { useUpcomingBookings, useUpdateBookingStatus } from "@/hooks/useBookings";
-import { formatCents } from "@/hooks/useWallet";
-import { Calendar, Clock, User, DollarSign, CheckCircle, XCircle, Briefcase } from "lucide-react";
+import { useBookings, useConfirmBookingTime, useUpdateBookingStatus } from "@/hooks/useBookings";
+import { Calendar, Clock, User, IndianRupee, CheckCircle, XCircle, Briefcase, Video, Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import { Link } from "react-router-dom";
+import type { ProposedTimeSlot } from "@/types/database";
 
 export default function BookingRequests() {
     const { toast } = useToast();
-    const { data: bookings = [], isLoading } = useUpcomingBookings('interviewer');
+    const { data: allBookings = [], isLoading } = useBookings({ role: 'interviewer' });
+    const confirmBookingTime = useConfirmBookingTime();
     const updateStatus = useUpdateBookingStatus();
+    const [meetingLinks, setMeetingLinks] = React.useState<Record<string, string>>({});
 
-    const pendingBookings = bookings.filter(b => b.status === 'pending');
-    const confirmedBookings = bookings.filter(b => b.status === 'confirmed');
+    const pendingBookings = allBookings.filter(b => b.status === 'pending');
+    const confirmedBookings = allBookings.filter(b => ['confirmed', 'in_progress'].includes(b.status));
 
-    const handleAccept = async (bookingId: string) => {
+    const handleConfirmTime = async (bookingId: string, scheduledAt: string) => {
         try {
-            await updateStatus.mutateAsync({ bookingId, status: 'confirmed' });
+            const meetLink = meetingLinks[bookingId] || '';
+            await confirmBookingTime.mutateAsync({
+                bookingId,
+                scheduledAt,
+                meetingLink: meetLink || undefined,
+            });
             toast({ title: "Booking confirmed!", description: "The student will be notified." });
         } catch (error) {
             toast({ title: "Failed to confirm booking", variant: "destructive" });
@@ -68,7 +78,7 @@ export default function BookingRequests() {
                         )}
                     </CardTitle>
                     <CardDescription>
-                        Review and accept or decline incoming interview requests
+                        Review requests and pick your preferred time from the student's proposed slots
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -78,67 +88,116 @@ export default function BookingRequests() {
                             <p>No pending requests</p>
                         </div>
                     ) : (
-                        <div className="space-y-4">
-                            {pendingBookings.map(booking => (
-                                <div
-                                    key={booking.id}
-                                    className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-lg border bg-card"
-                                >
-                                    <div className="space-y-2">
-                                        <div className="flex items-center gap-2">
-                                            <User className="h-4 w-4 text-muted-foreground" />
-                                            <span className="font-medium">
-                                                {booking.student_profile?.education || 'Student'}
-                                            </span>
+                        <div className="space-y-6">
+                            {pendingBookings.map(booking => {
+                                const proposedTimes: ProposedTimeSlot[] = booking.proposed_times ?? [];
+
+                                return (
+                                    <div
+                                        key={booking.id}
+                                        className="p-5 rounded-lg border bg-card space-y-4"
+                                    >
+                                        {/* Student Info */}
+                                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                                            <div className="space-y-2">
+                                                <div className="flex items-center gap-2">
+                                                    <User className="h-4 w-4 text-muted-foreground" />
+                                                    <span className="font-semibold text-lg">
+                                                        {booking.student_profile?.first_name
+                                                            ? `${(booking.student_profile as any).first_name} ${(booking.student_profile as any).last_name ?? ''}`
+                                                            : booking.student_profile?.education || 'Student'}
+                                                    </span>
+                                                </div>
+                                                <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
+                                                    <span className="flex items-center gap-1">
+                                                        <Briefcase className="h-4 w-4" />
+                                                        {booking.interview_type}
+                                                    </span>
+                                                    <span className="flex items-center gap-1">
+                                                        <Clock className="h-4 w-4" />
+                                                        {booking.duration_minutes} min
+                                                    </span>
+                                                    <span className="flex items-center gap-1">
+                                                        <IndianRupee className="h-4 w-4" />
+                                                        ₹{(booking.interviewer_amount_cents / 100).toFixed(0)}
+                                                    </span>
+                                                    {booking.payment_status === 'completed' && (
+                                                        <Badge variant="default" className="bg-green-600 text-xs">
+                                                            Paid
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                                {booking.target_company && (
+                                                    <Badge variant="outline">{booking.target_company}</Badge>
+                                                )}
+                                                {booking.student_notes && (
+                                                    <p className="text-sm text-muted-foreground mt-2 italic">
+                                                        "{booking.student_notes}"
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleReject(booking.id)}
+                                                disabled={updateStatus.isPending}
+                                                className="shrink-0"
+                                            >
+                                                <XCircle className="h-4 w-4 mr-1" />
+                                                Decline
+                                            </Button>
                                         </div>
-                                        <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                                            <span className="flex items-center gap-1">
-                                                <Calendar className="h-4 w-4" />
-                                                {format(new Date(booking.scheduled_at), 'MMM d, yyyy')}
-                                            </span>
-                                            <span className="flex items-center gap-1">
-                                                <Clock className="h-4 w-4" />
-                                                {format(new Date(booking.scheduled_at), 'h:mm a')}
-                                            </span>
-                                            <span className="flex items-center gap-1">
-                                                <Briefcase className="h-4 w-4" />
-                                                {booking.interview_type}
-                                            </span>
-                                            <span className="flex items-center gap-1">
-                                                <DollarSign className="h-4 w-4" />
-                                                {formatCents(booking.interviewer_amount_cents)}
-                                            </span>
-                                        </div>
-                                        {booking.target_company && (
-                                            <Badge variant="outline">{booking.target_company}</Badge>
-                                        )}
-                                        {booking.student_notes && (
-                                            <p className="text-sm text-muted-foreground mt-2">
-                                                Note: {booking.student_notes}
-                                            </p>
+
+                                        {/* Proposed Time Slots */}
+                                        {proposedTimes.length > 0 ? (
+                                            <div className="space-y-3">
+                                                <Label className="text-sm font-medium">
+                                                    Student's Proposed Times — pick one to confirm:
+                                                </Label>
+                                                <div className="grid gap-2 sm:grid-cols-3">
+                                                    {proposedTimes.map((slot, index) => {
+                                                        const slotDate = new Date(`${slot.date}T${slot.time}:00`);
+                                                        return (
+                                                            <Button
+                                                                key={index}
+                                                                variant="outline"
+                                                                className="h-auto py-3 flex flex-col gap-1 hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-950/30"
+                                                                onClick={() => handleConfirmTime(booking.id, slotDate.toISOString())}
+                                                                disabled={confirmBookingTime.isPending}
+                                                            >
+                                                                <span className="font-medium">
+                                                                    {format(new Date(slot.date), 'EEE, MMM d')}
+                                                                </span>
+                                                                <span className="text-sm text-muted-foreground">{slot.time}</span>
+                                                                <span className="text-xs text-green-600 mt-1">
+                                                                    <CheckCircle className="h-3 w-3 inline mr-1" />
+                                                                    Select
+                                                                </span>
+                                                            </Button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-4">
+                                                <div className="text-sm text-muted-foreground">
+                                                    <Calendar className="h-4 w-4 inline mr-1" />
+                                                    {format(new Date(booking.scheduled_at), 'MMM d, yyyy')} at {format(new Date(booking.scheduled_at), 'h:mm a')}
+                                                </div>
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => handleConfirmTime(booking.id, booking.scheduled_at)}
+                                                    disabled={confirmBookingTime.isPending}
+                                                >
+                                                    <CheckCircle className="h-4 w-4 mr-1" />
+                                                    Confirm
+                                                </Button>
+                                            </div>
                                         )}
                                     </div>
-                                    <div className="flex gap-2">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => handleReject(booking.id)}
-                                            disabled={updateStatus.isPending}
-                                        >
-                                            <XCircle className="h-4 w-4 mr-2" />
-                                            Decline
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            onClick={() => handleAccept(booking.id)}
-                                            disabled={updateStatus.isPending}
-                                        >
-                                            <CheckCircle className="h-4 w-4 mr-2" />
-                                            Accept
-                                        </Button>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </CardContent>
@@ -184,9 +243,18 @@ export default function BookingRequests() {
                                             <span>{format(new Date(booking.scheduled_at), 'MMM d, yyyy • h:mm a')}</span>
                                             <span>{booking.duration_minutes} min</span>
                                         </div>
+                                        <div className="text-sm text-muted-foreground">
+                                            <User className="h-3 w-3 inline mr-1" />
+                                            {booking.student_profile?.first_name
+                                                ? `${(booking.student_profile as any).first_name} ${(booking.student_profile as any).last_name ?? ''}`
+                                                : booking.student_profile?.education || 'Student'}
+                                        </div>
                                     </div>
                                     <Button variant="default" asChild>
-                                        <a href={`/app/interview/${booking.id}`}>Join Room</a>
+                                        <Link to={`/app/interview/${booking.id}`}>
+                                            <Video className="h-4 w-4 mr-2" />
+                                            Join Room
+                                        </Link>
                                     </Button>
                                 </div>
                             ))}

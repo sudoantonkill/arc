@@ -173,10 +173,11 @@ export function useProcessPayout() {
     });
 }
 
-// Helper to format currency
-export function formatCents(cents: number): string {
-    return new Intl.NumberFormat('en-US', {
+// Helper to format currency (paise to INR)
+export function formatCents(paise: number): string {
+    return new Intl.NumberFormat('en-IN', {
         style: 'currency',
-        currency: 'USD',
-    }).format(cents / 100);
+        currency: 'INR',
+        maximumFractionDigits: 0,
+    }).format(paise / 100);
 }
