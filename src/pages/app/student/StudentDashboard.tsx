@@ -34,7 +34,7 @@ type StudentProfile = {
 export default function StudentDashboard() {
   const { session } = useSession();
   const { toast } = useToast();
-  const supabase = getSupabaseClient();
+  const supabaseRef = React.useRef(getSupabaseClient());
 
   const [profile, setProfile] = React.useState<StudentProfile | null>(null);
   const [education, setEducation] = React.useState("");
@@ -42,13 +42,14 @@ export default function StudentDashboard() {
   const [interviewTypes, setInterviewTypes] = React.useState<string[]>([]);
   const [timezone, setTimezone] = React.useState("");
   const [isProfileLoading, setIsProfileLoading] = React.useState(true);
-  // Only flip to true after DB confirms complete OR user explicitly saves
   const [profileSetupDone, setProfileSetupDone] = React.useState(false);
+  const fetchedRef = React.useRef(false);
 
   React.useEffect(() => {
-    if (!supabase || !session) return;
+    const supabase = supabaseRef.current;
+    if (!supabase || !session || fetchedRef.current) return;
+    fetchedRef.current = true;
     void (async () => {
-      setIsProfileLoading(true);
       const { data } = await supabase.from("student_profiles").select("*").eq("user_id", session.user.id).maybeSingle();
       if (data) {
         setProfile(data);
@@ -56,16 +57,16 @@ export default function StudentDashboard() {
         setTargetCompanies(data.target_companies ?? []);
         setInterviewTypes(data.interview_types ?? []);
         setTimezone(data.timezone ?? "");
-        // Check if DB profile is already complete
         if ((data.education ?? '').trim() !== '') {
           setProfileSetupDone(true);
         }
       }
       setIsProfileLoading(false);
     })();
-  }, [session, supabase]);
+  }, [session]);
 
   const handleSave = async () => {
+    const supabase = supabaseRef.current;
     if (!supabase || !session) return;
     const { error } = await supabase
       .from("student_profiles")

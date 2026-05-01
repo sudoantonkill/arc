@@ -62,7 +62,7 @@ const COUNTRY_CODES = [
 export default function InterviewerDashboard() {
   const { session } = useSession();
   const { toast } = useToast();
-  const supabase = getSupabaseClient();
+  const supabaseRef = React.useRef(getSupabaseClient());
 
   const [profile, setProfile] = React.useState<InterviewerProfile | null>(null);
   // Personal info
@@ -102,10 +102,13 @@ export default function InterviewerDashboard() {
   // Only flip to true after DB confirms complete OR user explicitly saves
   const [profileSetupDone, setProfileSetupDone] = React.useState(false);
 
+  const fetchedRef = React.useRef(false);
+
   React.useEffect(() => {
-    if (!supabase || !session) return;
+    const supabase = supabaseRef.current;
+    if (!supabase || !session || fetchedRef.current) return;
+    fetchedRef.current = true;
     void (async () => {
-      setIsProfileLoading(true);
       const { data } = await supabase.from("interviewer_profiles").select("*").eq("user_id", session.user.id).maybeSingle();
       if (data) {
         setProfile(data);
@@ -135,9 +138,10 @@ export default function InterviewerDashboard() {
       }
       setIsProfileLoading(false);
     })();
-  }, [session, supabase]);
+  }, [session]);
 
   const handleSave = async () => {
+    const supabase = supabaseRef.current;
     if (!supabase || !session) return;
     const { error } = await supabase
       .from("interviewer_profiles")
