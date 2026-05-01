@@ -20,7 +20,7 @@ export default function MarketingHeader() {
       <div className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
           <div className="grid h-9 w-9 place-items-center rounded-md border border-border">
-            <span className="text-sm font-semibold tracking-tight">MI</span>
+            <span className="text-sm font-semibold tracking-tight">AI</span>
           </div>
           <span className="text-sm font-semibold tracking-tight">ArcInterview</span>
         </Link>

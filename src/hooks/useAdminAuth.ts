@@ -68,7 +68,7 @@ export function useAdminAuth() {
 
         if (password === masterPassword) {
             const session = {
-                email: import.meta.env.VITE_ADMIN_EMAIL || 'admin@interviewace.com',
+                email: import.meta.env.VITE_ADMIN_EMAIL || 'admin@arcinterview.com',
                 expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
             };
             localStorage.setItem('master_admin_session', JSON.stringify(session));
