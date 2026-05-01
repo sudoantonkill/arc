@@ -237,10 +237,10 @@ export default function CodeEditor({ bookingId, readOnly = false }: CodeEditorPr
                 setOutput(logs.join('\n') || 'Code executed (no output)');
 
             } else {
-                setOutput(\`⚠️ Live browser execution is currently supported for JavaScript, TypeScript, and Python.\\n\\nIn a full production environment, \${LANGUAGES.find(l => l.value === language)?.label} would execute on secure backend workers.\`);
+                setOutput(`⚠️ Live browser execution is currently supported for JavaScript, TypeScript, and Python.\n\nIn a full production environment, ${LANGUAGES.find(l => l.value === language)?.label} would execute on secure backend workers.`);
             }
         } catch (error) {
-            setOutput(\`Error: \${error instanceof Error ? error.message : String(error)}\`);
+            setOutput(`Error: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
             setIsExecuting(false);
         }
