@@ -1,5 +1,4 @@
 import * as React from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/hooks/useSession";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
@@ -63,7 +62,7 @@ const COUNTRY_CODES = [
 export default function InterviewerDashboard() {
   const { session } = useSession();
   const { toast } = useToast();
-  const supabaseRef = React.useRef(getSupabaseClient());
+  const supabase = getSupabaseClient();
 
   const [profile, setProfile] = React.useState<InterviewerProfile | null>(null);
   // Personal info
@@ -100,53 +99,45 @@ export default function InterviewerDashboard() {
   }, [allBookings]);
 
   const [isProfileLoading, setIsProfileLoading] = React.useState(true);
+  // Only flip to true after DB confirms complete OR user explicitly saves
   const [profileSetupDone, setProfileSetupDone] = React.useState(false);
-  const queryClient = useQueryClient();
 
-  const { data: profileData, isLoading: isProfileQueryLoading } = useQuery({
-    queryKey: ['interviewer_profile', session?.user?.id],
-    queryFn: async () => {
-      const supabase = supabaseRef.current;
-      if (!supabase || !session) return null;
+  React.useEffect(() => {
+    if (!supabase || !session) return;
+    void (async () => {
+      setIsProfileLoading(true);
       const { data } = await supabase.from("interviewer_profiles").select("*").eq("user_id", session.user.id).maybeSingle();
-      return data;
-    },
-    enabled: !!session,
-  });
-
-  React.useEffect(() => {
-    setIsProfileLoading(isProfileQueryLoading);
-  }, [isProfileQueryLoading]);
-
-  React.useEffect(() => {
-    if (profileData) {
-      setProfile(profileData);
-      setFirstName(profileData.first_name ?? "");
-      setLastName(profileData.last_name ?? "");
-      setLinkedinUrl(profileData.linkedin_url ?? "");
-      setGithubUrl(profileData.github_url ?? "");
-      setPhoneCountryCode(profileData.phone_country_code ?? "+1");
-      setPhoneNumber(profileData.phone_number ?? "");
-      setCompany(profileData.company_background ?? "");
-      setYearsExp(profileData.years_experience?.toString() ?? "");
-      setSpecialties(profileData.specialties ?? []);
-      setBio(profileData.bio ?? "");
-      setRate((profileData.hourly_rate_cents ?? 0).toString());
-      setTimezone(profileData.timezone ?? "");
-      
-      const dbComplete = 
-        (profileData.company_background ?? '').trim() !== '' &&
-        (profileData.bio ?? '').trim() !== '' &&
-        (profileData.hourly_rate_cents ?? 0) > 0 &&
-        (profileData.specialties ?? []).length > 0;
-      if (dbComplete) {
-        setProfileSetupDone(true);
+      if (data) {
+        setProfile(data);
+        // Personal info
+        setFirstName(data.first_name ?? "");
+        setLastName(data.last_name ?? "");
+        setLinkedinUrl(data.linkedin_url ?? "");
+        setGithubUrl(data.github_url ?? "");
+        setPhoneCountryCode(data.phone_country_code ?? "+1");
+        setPhoneNumber(data.phone_number ?? "");
+        // Professional info
+        setCompany(data.company_background ?? "");
+        setYearsExp(data.years_experience?.toString() ?? "");
+        setSpecialties(data.specialties ?? []);
+        setBio(data.bio ?? "");
+        setRate((data.hourly_rate_cents ?? 0).toString());
+        setTimezone(data.timezone ?? "");
+        // Check if DB profile is already complete (don't use live state)
+        const dbComplete = 
+          (data.company_background ?? '').trim() !== '' &&
+          (data.bio ?? '').trim() !== '' &&
+          (data.hourly_rate_cents ?? 0) > 0 &&
+          (data.specialties ?? []).length > 0;
+        if (dbComplete) {
+          setProfileSetupDone(true);
+        }
       }
-    }
-  }, [profileData]);
+      setIsProfileLoading(false);
+    })();
+  }, [session, supabase]);
 
   const handleSave = async () => {
-    const supabase = supabaseRef.current;
     if (!supabase || !session) return;
     const { error } = await supabase
       .from("interviewer_profiles")
@@ -173,8 +164,11 @@ export default function InterviewerDashboard() {
     if (error) {
       toast({ title: "Save failed", description: error.message, variant: "destructive" });
     } else {
-      queryClient.invalidateQueries({ queryKey: ['interviewer_profile', session.user.id] });
+      // Refresh profile to update completion status
+      const { data } = await supabase.from("interviewer_profiles").select("*").eq("user_id", session.user.id).maybeSingle();
+      if (data) setProfile(data);
       toast({ title: "Profile saved" });
+      // Mark setup as done so we transition to full dashboard
       setProfileSetupDone(true);
     }
   };

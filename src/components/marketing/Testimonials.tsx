@@ -13,7 +13,7 @@ const testimonials = [
         color: "from-blue-500 to-cyan-500",
     },
     {
-        quote: "After 3 sessions on ArcInterview, I felt so much more confident. The structured rubric made it clear exactly what I needed to work on.",
+        quote: "After 3 sessions on Interview Ace, I felt so much more confident. The structured rubric made it clear exactly what I needed to work on.",
         name: "Marcus Johnson",
         role: "Backend Developer",
         company: "Now at Stripe",

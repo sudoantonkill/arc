@@ -109,7 +109,7 @@ export function useRazorpayCheckout() {
                 key: orderData.keyId,
                 amount: orderData.amount,
                 currency: orderData.currency,
-                name: 'ArcInterview',
+                name: 'Interview Ace',
                 description: `${orderData.notes.interviewType} Interview`,
                 order_id: orderData.orderId,
                 prefill: orderData.prefill,

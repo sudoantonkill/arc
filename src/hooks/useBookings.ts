@@ -10,57 +10,6 @@ import type {
 
 const BOOKINGS_KEY = 'bookings';
 
-// Helper for manual joins when PostgREST foreign keys fail
-async function executeWithManualJoinFallback(
-    supabase: any,
-    buildQuery: () => any,
-    includeFeedback: boolean = false
-): Promise<BookingWithDetails[]> {
-    try {
-        // Try the standard join first with a fresh builder
-        let selectStr = '*, student_profile:student_profiles(*), interviewer_profile:interviewer_profiles(*)';
-        if (includeFeedback) selectStr += ', feedback:interview_feedback(*)';
-        
-        const { data, error } = await buildQuery().select(selectStr);
-        if (!error) return data ?? [];
-        
-        console.warn('Standard join failed, falling back to manual join', error);
-    } catch (e) {
-        console.warn('Standard join threw, falling back to manual join', e);
-    }
-
-    // Fallback: Manual join with a FRESH builder
-    const { data: rawBookings, error: rawError } = await buildQuery().select('*');
-    if (rawError) throw rawError;
-    if (!rawBookings || rawBookings.length === 0) return [];
-
-    const studentIds = [...new Set(rawBookings.map((b: any) => b.student_id))].filter(Boolean);
-    const interviewerIds = [...new Set(rawBookings.map((b: any) => b.interviewer_id))].filter(Boolean);
-    const bookingIds = includeFeedback ? rawBookings.map((b: any) => b.id) : [];
-
-    const [studentsRes, interviewersRes, feedbackRes] = await Promise.all([
-        studentIds.length > 0 ? supabase.from('student_profiles').select('*').in('user_id', studentIds) : Promise.resolve({ data: [] }),
-        interviewerIds.length > 0 ? supabase.from('interviewer_profiles').select('*').in('user_id', interviewerIds) : Promise.resolve({ data: [] }),
-        (includeFeedback && bookingIds.length > 0) ? supabase.from('interview_feedback').select('*').in('booking_id', bookingIds) : Promise.resolve({ data: [] })
-    ]);
-
-    const studentsMap = Object.fromEntries((studentsRes.data || []).map((p: any) => [p.user_id, p]));
-    const interviewersMap = Object.fromEntries((interviewersRes.data || []).map((p: any) => [p.user_id, p]));
-    // Group feedback by booking_id
-    const feedbackMap: Record<string, any[]> = {};
-    (feedbackRes.data || []).forEach((f: any) => {
-        if (!feedbackMap[f.booking_id]) feedbackMap[f.booking_id] = [];
-        feedbackMap[f.booking_id].push(f);
-    });
-
-    return rawBookings.map((b: any) => ({
-        ...b,
-        student_profile: studentsMap[b.student_id] || null,
-        interviewer_profile: interviewersMap[b.interviewer_id] || null,
-        ...(includeFeedback ? { feedback: feedbackMap[b.id] || [] } : {})
-    }));
-}
-
 export function useBookings(filters?: { status?: BookingStatus; role?: 'student' | 'interviewer' }) {
     const { session } = useSession();
     const supabase = getSupabaseClient();
@@ -70,20 +19,32 @@ export function useBookings(filters?: { status?: BookingStatus; role?: 'student'
         queryFn: async (): Promise<BookingWithDetails[]> => {
             if (!supabase || !session) return [];
 
-            const buildQuery = () => {
-                let query = supabase.from('bookings');
-                if (filters?.role === 'student') query = query.eq('student_id', session.user.id);
-                else if (filters?.role === 'interviewer') query = query.eq('interviewer_id', session.user.id);
-                
-                if (filters?.status) query = query.eq('status', filters.status);
-                
-                return query.order('scheduled_at', { ascending: true });
-            };
+            let query = supabase
+                .from('bookings')
+                .select(`
+          *,
+          student_profile:student_profiles(*),
+          interviewer_profile:interviewer_profiles(*)
+        `)
+                .order('scheduled_at', { ascending: true });
 
-            return await executeWithManualJoinFallback(supabase, buildQuery);
+            // Filter by role
+            if (filters?.role === 'student') {
+                query = query.eq('student_id', session.user.id);
+            } else if (filters?.role === 'interviewer') {
+                query = query.eq('interviewer_id', session.user.id);
+            }
+
+            // Filter by status
+            if (filters?.status) {
+                query = query.eq('status', filters.status);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+            return data ?? [];
         },
         enabled: !!supabase && !!session,
-        refetchInterval: 3000,
     });
 }
 
@@ -95,12 +56,21 @@ export function useBooking(bookingId: string) {
         queryFn: async (): Promise<BookingWithDetails | null> => {
             if (!supabase || !bookingId) return null;
 
-            const buildQuery = () => supabase.from('bookings').eq('id', bookingId);
-            const results = await executeWithManualJoinFallback(supabase, buildQuery, true);
-            return results.length > 0 ? results[0] : null;
+            const { data, error } = await supabase
+                .from('bookings')
+                .select(`
+          *,
+          student_profile:student_profiles(*),
+          interviewer_profile:interviewer_profiles(*),
+          feedback:interview_feedback(*)
+        `)
+                .eq('id', bookingId)
+                .single();
+
+            if (error) throw error;
+            return data;
         },
         enabled: !!supabase && !!bookingId,
-        refetchInterval: 3000,
     });
 }
 
@@ -119,16 +89,21 @@ export function useUpcomingBookings(role: 'student' | 'interviewer') {
                 ? ['pending', 'confirmed', 'in_progress']
                 : ['confirmed', 'in_progress'];
 
-            const buildQuery = () => supabase
+            const { data, error } = await supabase
                 .from('bookings')
+                .select(`
+          *,
+          student_profile:student_profiles(*),
+          interviewer_profile:interviewer_profiles(*)
+        `)
                 .eq(columnName, session.user.id)
                 .in('status', statuses)
                 .order('scheduled_at', { ascending: true });
 
-            return await executeWithManualJoinFallback(supabase, buildQuery);
+            if (error) throw error;
+            return data ?? [];
         },
         enabled: !!supabase && !!session,
-        refetchInterval: 3000,
     });
 }
 
@@ -152,7 +127,6 @@ export function useStudentActiveBookings() {
             return data ?? [];
         },
         enabled: !!supabase && !!session,
-        refetchInterval: 3000,
     });
 }
 
@@ -167,16 +141,22 @@ export function usePastBookings(role: 'student' | 'interviewer') {
 
             const columnName = role === 'student' ? 'student_id' : 'interviewer_id';
 
-            const buildQuery = () => supabase
+            const { data, error } = await supabase
                 .from('bookings')
+                .select(`
+          *,
+          student_profile:student_profiles(*),
+          interviewer_profile:interviewer_profiles(*),
+          feedback:interview_feedback(*)
+        `)
                 .eq(columnName, session.user.id)
                 .in('status', ['completed', 'cancelled', 'no_show'])
                 .order('scheduled_at', { ascending: false });
 
-            return await executeWithManualJoinFallback(supabase, buildQuery, true);
+            if (error) throw error;
+            return data ?? [];
         },
         enabled: !!supabase && !!session,
-        refetchInterval: 3000,
     });
 }
 

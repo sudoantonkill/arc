@@ -1,5 +1,4 @@
 import * as React from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/hooks/useSession";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
@@ -35,40 +34,38 @@ type StudentProfile = {
 export default function StudentDashboard() {
   const { session } = useSession();
   const { toast } = useToast();
-  const supabaseRef = React.useRef(getSupabaseClient());
+  const supabase = getSupabaseClient();
 
+  const [profile, setProfile] = React.useState<StudentProfile | null>(null);
   const [education, setEducation] = React.useState("");
   const [targetCompanies, setTargetCompanies] = React.useState<string[]>([]);
   const [interviewTypes, setInterviewTypes] = React.useState<string[]>([]);
   const [timezone, setTimezone] = React.useState("");
+  const [isProfileLoading, setIsProfileLoading] = React.useState(true);
+  // Only flip to true after DB confirms complete OR user explicitly saves
   const [profileSetupDone, setProfileSetupDone] = React.useState(false);
-  const queryClient = useQueryClient();
-
-  const { data: profile, isLoading: isProfileLoading } = useQuery({
-    queryKey: ['student_profile', session?.user?.id],
-    queryFn: async () => {
-      const supabase = supabaseRef.current;
-      if (!supabase || !session) return null;
-      const { data } = await supabase.from("student_profiles").select("*").eq("user_id", session.user.id).maybeSingle();
-      return data;
-    },
-    enabled: !!session,
-  });
 
   React.useEffect(() => {
-    if (profile) {
-      setEducation(profile.education ?? "");
-      setTargetCompanies(profile.target_companies ?? []);
-      setInterviewTypes(profile.interview_types ?? []);
-      setTimezone(profile.timezone ?? "");
-      if ((profile.education ?? '').trim() !== '') {
-        setProfileSetupDone(true);
+    if (!supabase || !session) return;
+    void (async () => {
+      setIsProfileLoading(true);
+      const { data } = await supabase.from("student_profiles").select("*").eq("user_id", session.user.id).maybeSingle();
+      if (data) {
+        setProfile(data);
+        setEducation(data.education ?? "");
+        setTargetCompanies(data.target_companies ?? []);
+        setInterviewTypes(data.interview_types ?? []);
+        setTimezone(data.timezone ?? "");
+        // Check if DB profile is already complete
+        if ((data.education ?? '').trim() !== '') {
+          setProfileSetupDone(true);
+        }
       }
-    }
-  }, [profile]);
+      setIsProfileLoading(false);
+    })();
+  }, [session, supabase]);
 
   const handleSave = async () => {
-    const supabase = supabaseRef.current;
     if (!supabase || !session) return;
     const { error } = await supabase
       .from("student_profiles")
@@ -85,9 +82,11 @@ export default function StudentDashboard() {
     if (error) {
       toast({ title: "Save failed", description: error.message, variant: "destructive" });
     } else {
-      // Refresh profile globally via React Query
-      queryClient.invalidateQueries({ queryKey: ['student_profile', session.user.id] });
+      // Refresh profile to update completion status
+      const { data } = await supabase.from("student_profiles").select("*").eq("user_id", session.user.id).maybeSingle();
+      if (data) setProfile(data);
       toast({ title: "Profile saved" });
+      // Mark setup as done so we transition to full dashboard
       setProfileSetupDone(true);
     }
   };

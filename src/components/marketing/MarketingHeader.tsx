@@ -20,9 +20,9 @@ export default function MarketingHeader() {
       <div className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
           <div className="grid h-9 w-9 place-items-center rounded-md border border-border">
-            <span className="text-sm font-semibold tracking-tight">AI</span>
+            <span className="text-sm font-semibold tracking-tight">MI</span>
           </div>
-          <span className="text-sm font-semibold tracking-tight">ArcInterview</span>
+          <span className="text-sm font-semibold tracking-tight">MockInterview</span>
         </Link>
 
         <nav className="hidden items-center gap-6 md:flex" aria-label="Primary">

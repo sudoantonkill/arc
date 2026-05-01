@@ -87,7 +87,7 @@ export default function SignIn() {
       <header className="border-b border-border bg-background/80 backdrop-blur">
         <div className="container flex h-16 items-center justify-between">
           <Link to="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight hover:opacity-80 transition-opacity">
-            <span className="text-lg">ArcInterview</span>
+            <span className="text-lg">MockInterview</span>
           </Link>
           <Link to="/">
             <Button variant="ghost" size="sm" className="gap-2">

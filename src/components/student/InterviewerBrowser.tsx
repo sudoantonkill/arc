@@ -67,7 +67,7 @@ export default function InterviewerBrowser() {
                     Browse Interviewers
                 </CardTitle>
                 <CardDescription>
-                    Find and book interviews with experienced professionals
+                    Find and book mock interviews with experienced professionals
                 </CardDescription>
             </CardHeader>
             <CardContent>
