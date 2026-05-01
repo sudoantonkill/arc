@@ -89,6 +89,7 @@ export function useBookings(filters?: { status?: BookingStatus; role?: 'student'
             return await executeWithManualJoinFallback(supabase, query);
         },
         enabled: !!supabase && !!session,
+        refetchInterval: 3000,
     });
 }
 
@@ -105,6 +106,7 @@ export function useBooking(bookingId: string) {
             return results.length > 0 ? results[0] : null;
         },
         enabled: !!supabase && !!bookingId,
+        refetchInterval: 3000,
     });
 }
 
@@ -155,6 +157,7 @@ export function useStudentActiveBookings() {
             return data ?? [];
         },
         enabled: !!supabase && !!session,
+        refetchInterval: 3000,
     });
 }
 
@@ -178,6 +181,7 @@ export function usePastBookings(role: 'student' | 'interviewer') {
             return await executeWithManualJoinFallback(supabase, query, true);
         },
         enabled: !!supabase && !!session,
+        refetchInterval: 3000,
     });
 }
 
