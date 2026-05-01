@@ -22,7 +22,7 @@ export default function MarketingHeader() {
           <div className="grid h-9 w-9 place-items-center rounded-md border border-border">
             <span className="text-sm font-semibold tracking-tight">MI</span>
           </div>
-          <span className="text-sm font-semibold tracking-tight">MockInterview</span>
+          <span className="text-sm font-semibold tracking-tight">ArcInterview</span>
         </Link>
 
         <nav className="hidden items-center gap-6 md:flex" aria-label="Primary">
