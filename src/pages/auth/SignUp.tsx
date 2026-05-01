@@ -120,7 +120,7 @@ export default function SignUp() {
       <header className="border-b border-border bg-background/80 backdrop-blur">
         <div className="container flex h-16 items-center justify-between">
           <Link to="/" className="flex items-center gap-2 text-sm font-semibold tracking-tight hover:opacity-80 transition-opacity">
-            <span className="text-lg">MockInterview</span>
+            <span className="text-lg">ArcInterview</span>
           </Link>
           <Link to="/">
             <Button variant="ghost" size="sm" className="gap-2">
@@ -134,7 +134,7 @@ export default function SignUp() {
       <section className="container max-w-md py-12">
         <header className="space-y-2">
           <h1 className="text-3xl font-semibold tracking-tight">Create account</h1>
-          <p className="text-muted-foreground">Start booking paid mock interviews in minutes.</p>
+          <p className="text-muted-foreground">Start booking paid interviews in minutes.</p>
         </header>
 
         <div className="mt-8">

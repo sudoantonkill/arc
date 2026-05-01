@@ -175,7 +175,7 @@ export default function UpcomingSessions() {
                         )}
                     </CardTitle>
                     <CardDescription>
-                        Your confirmed mock interviews
+                        Your confirmed interviews
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -186,7 +186,7 @@ export default function UpcomingSessions() {
                             <p className="text-sm text-muted-foreground mt-1">
                                 {pendingBookings.length > 0
                                     ? "You have pending bookings — the interviewer will confirm a time soon."
-                                    : "Browse interviewers to book your first mock interview"}
+                                    : "Browse interviewers to book your first interview"}
                             </p>
                         </div>
                     ) : (

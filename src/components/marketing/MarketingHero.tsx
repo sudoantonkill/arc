@@ -42,7 +42,7 @@ export default function MarketingHero() {
             </h1>
 
             <p className="text-xl text-muted-foreground max-w-xl leading-relaxed">
-              Book paid mock interviews with real engineers from
+              Book paid interviews with real engineers from
               <span className="font-semibold text-foreground"> Google, Meta, Amazon, </span>
               and more. Get structured feedback with actionable improvement plans.
             </p>

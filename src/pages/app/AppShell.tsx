@@ -79,7 +79,7 @@ export default function AppShell() {
       <header className="border-b border-border bg-background/80 backdrop-blur">
         <div className="container flex h-16 items-center justify-between">
           <Link to="/" className="text-sm font-semibold tracking-tight">
-            MockInterview
+            ArcInterview
           </Link>
 
           <nav className="flex items-center gap-6" aria-label="App">

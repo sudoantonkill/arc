@@ -105,7 +105,7 @@ export default function AvailabilityCalendar() {
                     Availability Calendar
                 </CardTitle>
                 <CardDescription>
-                    Set your weekly availability for mock interviews. Students will only be able to book during these times.
+                    Set your weekly availability for interviews. Students will only be able to book during these times.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">

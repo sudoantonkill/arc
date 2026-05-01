@@ -60,7 +60,7 @@ export default function FeedbackReports() {
                     Interview Reports
                 </CardTitle>
                 <CardDescription>
-                    Review feedback from your mock interviews to track your progress
+                    Review feedback from your interviews to track your progress
                 </CardDescription>
             </CardHeader>
             <CardContent>

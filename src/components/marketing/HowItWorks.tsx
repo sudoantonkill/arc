@@ -86,7 +86,7 @@ export default function HowItWorks() {
         {/* Bottom CTA */}
         <div className="mt-16 text-center">
           <div className="inline-flex items-center gap-2 text-primary hover:gap-4 transition-all cursor-pointer group">
-            <span className="font-medium">Start your first mock interview</span>
+            <span className="font-medium">Start your first interview</span>
             <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
           </div>
         </div>
