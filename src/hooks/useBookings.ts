@@ -13,15 +13,15 @@ const BOOKINGS_KEY = 'bookings';
 // Helper for manual joins when PostgREST foreign keys fail
 async function executeWithManualJoinFallback(
     supabase: any,
-    baseQueryBuilder: any,
+    buildQuery: () => any,
     includeFeedback: boolean = false
 ): Promise<BookingWithDetails[]> {
     try {
-        // Try the standard join first
+        // Try the standard join first with a fresh builder
         let selectStr = '*, student_profile:student_profiles(*), interviewer_profile:interviewer_profiles(*)';
         if (includeFeedback) selectStr += ', feedback:interview_feedback(*)';
         
-        const { data, error } = await baseQueryBuilder.select(selectStr);
+        const { data, error } = await buildQuery().select(selectStr);
         if (!error) return data ?? [];
         
         console.warn('Standard join failed, falling back to manual join', error);
@@ -29,8 +29,8 @@ async function executeWithManualJoinFallback(
         console.warn('Standard join threw, falling back to manual join', e);
     }
 
-    // Fallback: Manual join
-    const { data: rawBookings, error: rawError } = await baseQueryBuilder.select('*');
+    // Fallback: Manual join with a FRESH builder
+    const { data: rawBookings, error: rawError } = await buildQuery().select('*');
     if (rawError) throw rawError;
     if (!rawBookings || rawBookings.length === 0) return [];
 
@@ -70,23 +70,17 @@ export function useBookings(filters?: { status?: BookingStatus; role?: 'student'
         queryFn: async (): Promise<BookingWithDetails[]> => {
             if (!supabase || !session) return [];
 
-            let query = supabase.from('bookings');
+            const buildQuery = () => {
+                let query = supabase.from('bookings');
+                if (filters?.role === 'student') query = query.eq('student_id', session.user.id);
+                else if (filters?.role === 'interviewer') query = query.eq('interviewer_id', session.user.id);
+                
+                if (filters?.status) query = query.eq('status', filters.status);
+                
+                return query.order('scheduled_at', { ascending: true });
+            };
 
-            // Filter by role
-            if (filters?.role === 'student') {
-                query = query.eq('student_id', session.user.id);
-            } else if (filters?.role === 'interviewer') {
-                query = query.eq('interviewer_id', session.user.id);
-            }
-
-            // Filter by status
-            if (filters?.status) {
-                query = query.eq('status', filters.status);
-            }
-
-            query = query.order('scheduled_at', { ascending: true });
-
-            return await executeWithManualJoinFallback(supabase, query);
+            return await executeWithManualJoinFallback(supabase, buildQuery);
         },
         enabled: !!supabase && !!session,
         refetchInterval: 3000,
@@ -101,8 +95,8 @@ export function useBooking(bookingId: string) {
         queryFn: async (): Promise<BookingWithDetails | null> => {
             if (!supabase || !bookingId) return null;
 
-            const query = supabase.from('bookings').eq('id', bookingId);
-            const results = await executeWithManualJoinFallback(supabase, query, true);
+            const buildQuery = () => supabase.from('bookings').eq('id', bookingId);
+            const results = await executeWithManualJoinFallback(supabase, buildQuery, true);
             return results.length > 0 ? results[0] : null;
         },
         enabled: !!supabase && !!bookingId,
@@ -125,15 +119,16 @@ export function useUpcomingBookings(role: 'student' | 'interviewer') {
                 ? ['pending', 'confirmed', 'in_progress']
                 : ['confirmed', 'in_progress'];
 
-            const query = supabase
+            const buildQuery = () => supabase
                 .from('bookings')
                 .eq(columnName, session.user.id)
                 .in('status', statuses)
                 .order('scheduled_at', { ascending: true });
 
-            return await executeWithManualJoinFallback(supabase, query);
+            return await executeWithManualJoinFallback(supabase, buildQuery);
         },
         enabled: !!supabase && !!session,
+        refetchInterval: 3000,
     });
 }
 
@@ -172,13 +167,13 @@ export function usePastBookings(role: 'student' | 'interviewer') {
 
             const columnName = role === 'student' ? 'student_id' : 'interviewer_id';
 
-            const query = supabase
+            const buildQuery = () => supabase
                 .from('bookings')
                 .eq(columnName, session.user.id)
                 .in('status', ['completed', 'cancelled', 'no_show'])
                 .order('scheduled_at', { ascending: false });
 
-            return await executeWithManualJoinFallback(supabase, query, true);
+            return await executeWithManualJoinFallback(supabase, buildQuery, true);
         },
         enabled: !!supabase && !!session,
         refetchInterval: 3000,
