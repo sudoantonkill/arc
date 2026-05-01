@@ -2,7 +2,14 @@ import * as React from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabaseClient";
 
-export function useSession() {
+interface SessionContextType {
+  session: Session | null;
+  isLoading: boolean;
+}
+
+const SessionContext = React.createContext<SessionContextType>({ session: null, isLoading: true });
+
+export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = React.useState<Session | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
 
@@ -44,5 +51,13 @@ export function useSession() {
     };
   }, []);
 
-  return { session, isLoading };
+  return (
+    <SessionContext.Provider value={{ session, isLoading }}>
+      {children}
+    </SessionContext.Provider>
+  );
+}
+
+export function useSession() {
+  return React.useContext(SessionContext);
 }

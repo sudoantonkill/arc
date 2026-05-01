@@ -2,6 +2,8 @@ import { Button } from "@/components/ui/button";
 import { useMyRoles } from "@/hooks/useMyRoles";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabaseClient";
 import { Link, Outlet, useLocation } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 
 function NavItem({ to, label, isActive }: { to: string; label: string; isActive: boolean }) {
   return (
@@ -23,6 +25,32 @@ export default function AppShell() {
   const configured = isSupabaseConfigured();
   const supabase = getSupabaseClient();
   const { roles, isLoading } = useMyRoles(Boolean(configured));
+  const queryClient = useQueryClient();
+
+  // Setup Realtime Subscription for perfect syncing between dashboards
+  useEffect(() => {
+    if (!supabase || !configured) return;
+
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'bookings',
+        },
+        () => {
+          // Invalidate bookings queries so both dashboards update instantly
+          queryClient.invalidateQueries({ queryKey: ['bookings'] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, configured, queryClient]);
 
   // Show loading state while roles are being fetched to prevent flickering
   if (isLoading) {

@@ -23,8 +23,8 @@ export function useBookings(filters?: { status?: BookingStatus; role?: 'student'
                 .from('bookings')
                 .select(`
           *,
-          student_profile:student_profiles!bookings_student_profile_fkey(*),
-          interviewer_profile:interviewer_profiles!bookings_interviewer_profile_fkey(*)
+          student_profile:student_profiles(*),
+          interviewer_profile:interviewer_profiles(*)
         `)
                 .order('scheduled_at', { ascending: true });
 
@@ -60,8 +60,8 @@ export function useBooking(bookingId: string) {
                 .from('bookings')
                 .select(`
           *,
-          student_profile:student_profiles!bookings_student_profile_fkey(*),
-          interviewer_profile:interviewer_profiles!bookings_interviewer_profile_fkey(*),
+          student_profile:student_profiles(*),
+          interviewer_profile:interviewer_profiles(*),
           feedback:interview_feedback(*)
         `)
                 .eq('id', bookingId)
@@ -93,8 +93,8 @@ export function useUpcomingBookings(role: 'student' | 'interviewer') {
                 .from('bookings')
                 .select(`
           *,
-          student_profile:student_profiles!bookings_student_profile_fkey(*),
-          interviewer_profile:interviewer_profiles!bookings_interviewer_profile_fkey(*)
+          student_profile:student_profiles(*),
+          interviewer_profile:interviewer_profiles(*)
         `)
                 .eq(columnName, session.user.id)
                 .in('status', statuses)
@@ -145,8 +145,8 @@ export function usePastBookings(role: 'student' | 'interviewer') {
                 .from('bookings')
                 .select(`
           *,
-          student_profile:student_profiles!bookings_student_profile_fkey(*),
-          interviewer_profile:interviewer_profiles!bookings_interviewer_profile_fkey(*),
+          student_profile:student_profiles(*),
+          interviewer_profile:interviewer_profiles(*),
           feedback:interview_feedback(*)
         `)
                 .eq(columnName, session.user.id)
